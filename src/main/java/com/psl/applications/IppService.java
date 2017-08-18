@@ -12,22 +12,28 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 import org.eclipse.stardust.common.StringUtils;
+import org.eclipse.stardust.common.error.AccessForbiddenException;
 import org.eclipse.stardust.common.error.InvalidValueException;
 import org.eclipse.stardust.common.error.ObjectNotFoundException;
 import org.eclipse.stardust.common.log.LogManager;
 import org.eclipse.stardust.common.log.Logger;
 import org.eclipse.stardust.engine.api.model.Activity;
+import org.eclipse.stardust.engine.api.model.DataPath;
 import org.eclipse.stardust.engine.api.model.ImplementationType;
 import org.eclipse.stardust.engine.api.model.ModelParticipant;
 
 import org.eclipse.stardust.engine.api.query.ActivityInstanceQuery;
+import org.eclipse.stardust.engine.api.query.DataFilter;
+import org.eclipse.stardust.engine.api.query.DescriptorPolicy;
 import org.eclipse.stardust.engine.api.query.ProcessInstanceFilter;
-
+import org.eclipse.stardust.engine.api.query.ProcessInstanceQuery;
+import org.eclipse.stardust.engine.api.query.ProcessInstances;
 import org.eclipse.stardust.engine.api.runtime.ActivityInstance;
 import org.eclipse.stardust.engine.api.runtime.ActivityInstanceState;
 import org.eclipse.stardust.engine.api.runtime.AdministrationService;
@@ -45,6 +51,7 @@ import org.eclipse.stardust.engine.api.runtime.ServiceFactoryLocator;
 import org.eclipse.stardust.engine.api.runtime.User;
 import org.eclipse.stardust.engine.api.runtime.UserInfo;
 import org.eclipse.stardust.engine.api.runtime.WorkflowService;
+import org.eclipse.stardust.engine.core.runtime.beans.AbortScope;
 import org.eclipse.stardust.engine.extensions.dms.data.DocumentType;
 
 import com.google.gson.JsonArray;
@@ -305,16 +312,23 @@ public class IppService {
 				jo = new JsonObject();
 				jo.addProperty("docName", doc.getName());
 				jo.addProperty("View", doc.getId());
-				if(doc.getDateCreated() !=null){
+				/*if(doc.getDateCreated() !=null){
 					cal.setTime(doc.getDateCreated());
 					formatedDate = cal.get(Calendar.DATE) + "/" + (cal.get(Calendar.MONTH) + 1) + "/" + cal.get(Calendar.YEAR);
-				}
-				//jo.addProperty("createdDate", doc.getDateCreated() == null ? " " : doc.getDateCreated().toString());
-				jo.addProperty("createdDate", doc.getDateCreated() == null ? " " : formatedDate);
+				}*/
+				jo.addProperty("createdDate", doc.getDateCreated() == null ? " " : doc.getDateCreated().toString());
+				//jo.addProperty("createdDate", doc.getDateCreated() == null ? " " : formatedDate);
 				// jo.addProperty("lastModifiedDate", doc.getDateLastModified()
 				// == null ? " " : doc.getDateLastModified().toString());
 				jo.addProperty("version", doc.getRevisionName() == null ? " " : doc.getRevisionName());
 				jo.addProperty("docType", getDocumentTypeString(doc));
+			    //LOG.info("Properties :" + doc.getProperties());
+			    try{
+				jo.addProperty("MetaDataDocVersion",doc.getProperties().get(ApplicationConstants.META_DATA_MEMBER_NO.getValue()).toString());
+			    }catch(Exception e){
+			    	jo.addProperty("MetaDataDocVersion","1.0");
+			    }
+				//jo.addProperty("versionComment", doc.getRevisionComment());
 				ja.add(jo);
 			}
 
@@ -597,5 +611,358 @@ public class IppService {
 
 		return metaDataMap;
 	}
+	
+	// not being used
+	public void deleteDocuments(String docId){
+		LOG.info("Inside IPP Service. Delete Document method. Document Id -: " + docId);
+		getDocumentManagementService().removeDocument(docId);
+	}
+	
+	public void removeDocument(String docId,long processOid){
+		
+		Document document = getDocumentManagementService().getDocument(docId);
+		List<Document> processAttachments = null;
+        List<Document> attachedDocs = new ArrayList<Document>();
+		Object processData = getProcessData(processOid, ApplicationConstants.PROCESS_ATTACHMENTS.getValue());
+
+		processAttachments = (List<Document>) processData;
+		attachedDocs.addAll(processAttachments);
+		
+		for(Document doc :attachedDocs){
+			if(doc.getId().equalsIgnoreCase(docId)){
+				LOG.info("Document : docId : "+doc.getId());
+				processAttachments.remove(doc);
+			}
+		}
+		LOG.info("Size of process attachment :"+processAttachments.size());
+		
+		setProcessData(processOid, ApplicationConstants.PROCESS_ATTACHMENTS.getValue(), processAttachments);
+	}
+	
+	
+	
+	
+	
+	// Updated by prerna
+	
+    public ProcessInstances fetchProcessInstances(JsonObject jsonObject) {
+
+        String processId = null;
+        JsonObject mainObj;
+
+        processId = jsonObject.get("processId").getAsString();
+
+        ProcessInstanceQuery piQuery = ProcessInstanceQuery.findForProcess(processId, false);
+        piQuery.setPolicy(DescriptorPolicy.WITH_DESCRIPTORS);
+        jsonObject.remove("processId");
+        Set<Map.Entry<String, JsonElement>> jsonMap = jsonObject.entrySet();
+
+        LOG.info("inside getProcessDataPaths  method : Process ID : " + processId);
+
+        for (Map.Entry<String, JsonElement> mapEntry : jsonMap) {
+
+              String[] dataElement = mapEntry.getKey().split("\\.");
+              Number dataValue;
+              if (dataElement.length > 1) {
+
+                    if (mapEntry.getValue().getAsJsonPrimitive().isNumber()) {
+                          dataValue = mapEntry.getValue().getAsJsonPrimitive().getAsNumber();
+                          if (dataValue instanceof Integer || dataValue instanceof Long) {
+                                piQuery.where(
+                                            DataFilter.isEqual(dataElement[0], dataElement[1], mapEntry.getValue().getAsLong()));
+                          } else if (dataValue instanceof Float || dataValue instanceof Double) {
+                                piQuery.where(
+                                            DataFilter.isEqual(dataElement[0], dataElement[1], mapEntry.getValue().getAsDouble()));
+                          }
+                    } else {
+                          piQuery.where(
+                                      DataFilter.isEqual(dataElement[0], dataElement[1], mapEntry.getValue().getAsString()));
+
+                    }
+
+              } else {
+                    if (mapEntry.getValue().getAsJsonPrimitive().isNumber()) {
+                          dataValue = mapEntry.getValue().getAsJsonPrimitive().getAsNumber();
+                          if (dataValue instanceof Integer || dataValue instanceof Long) {
+                                piQuery.where(DataFilter.isEqual(dataElement[0], mapEntry.getValue().getAsLong()));
+                          } else if (dataValue instanceof Float || dataValue instanceof Double) {
+                                piQuery.where(DataFilter.isEqual(dataElement[0], mapEntry.getValue().getAsDouble()));
+                          }
+                    } else {
+                          piQuery.where(DataFilter.isEqual(dataElement[0], mapEntry.getValue().getAsString()));
+
+                    }
+
+              }
+
+        }
+
+        ProcessInstances pis = getQueryService().getAllProcessInstances(piQuery);
+
+        LOG.info("Process Instance fetched  - Count : " + pis.getSize());
+
+        return pis;
+  }
+
+
+
+/**
+  * @param pis
+  * @param setDataPath
+  * @param dataPathJson
+  * @return
+  * Method by Prerna
+  */
+  public JsonObject fetchAndSetProcessDataPaths(ProcessInstances pis, boolean setDataPath, JsonObject dataPathJson) {
+        JsonObject jo = null;
+        JsonArray ja = new JsonArray();
+        JsonObject mainObj = new JsonObject();
+        String dataPathId = null;
+        String datPathValue = null;
+        long processInstanceOID = 0L;
+
+        for (Iterator iterator = pis.iterator(); iterator.hasNext();) {
+
+              try {
+
+                    ProcessInstance pi = (ProcessInstance) iterator.next();
+                    processInstanceOID = pi.getOID();
+                    if (setDataPath) {
+                          LOG.info("Inside fetchAndSetProcessDataPaths - Data Paths to set : " + dataPathJson);
+                          Set<Map.Entry<String, JsonElement>> jsonMap = dataPathJson.entrySet();
+                          for (Map.Entry<String, JsonElement> mapEntry : jsonMap) {
+
+                                dataPathId = mapEntry.getKey();
+                                datPathValue = mapEntry.getValue().getAsString();
+
+                                getWorkflowService().setOutDataPath(processInstanceOID, dataPathId, datPathValue);
+
+                          }
+                    }
+                    List<DataPath> dpList = pi.getDescriptorDefinitions();
+
+                    jo = new JsonObject();
+                    jo.addProperty("processOID", processInstanceOID);
+                    jo.addProperty("processStatus", pi.getState().getName());
+
+                    for (DataPath dp : dpList) {
+
+                          dataPathId = dp.getId();
+                          LOG.info("Inside fetchAndSetProcessDataPaths - Fetching Data Paths : " + dataPathId);
+
+                          datPathValue = pi.getDescriptorValue(dataPathId) != null
+                                      ? pi.getDescriptorValue(dataPathId).toString() : null;
+                          jo.addProperty(dataPathId, datPathValue);
+
+                    }
+
+                    ja.add(jo);
+              } catch (ObjectNotFoundException e) {
+
+                    LOG.info("Inside fetchAndSetProcessDataPaths - Cannot find data path : " + dataPathId + " : "
+                                + datPathValue + " for process OID : " + processInstanceOID);
+
+              }
+
+        }
+        mainObj.add("ProcessDetails", ja);
+        return mainObj;
+  }
+
+  // A method by Prerna
+  public JsonObject abortProcessInstances(ProcessInstances pis, String heirarchy) {
+        JsonObject jo = null;
+        JsonArray ja = new JsonArray();
+        JsonObject mainObj = new JsonObject();
+        long processInstanceOID = 0L;
+
+        for (Iterator iterator = pis.iterator(); iterator.hasNext();) {
+
+              try {
+
+                    jo = new JsonObject();
+                    ProcessInstance pi = (ProcessInstance) iterator.next();
+                    processInstanceOID = pi.getOID();
+                    ProcessInstance abortedProcess = null;
+                    if (!pi.getState().getName().equals(ProcessInstanceState.Aborted.toString())) {
+                          if (heirarchy.equals("subProcess")) {
+                                abortedProcess = getWorkflowService().abortProcessInstance(processInstanceOID,
+                                            AbortScope.SubHierarchy);
+                          } else {
+
+                                abortedProcess = getWorkflowService().abortProcessInstance(processInstanceOID,
+                                            AbortScope.RootHierarchy);
+
+                          }
+                          jo.addProperty("processOid", abortedProcess.getOID());
+                          jo.addProperty("aborted", "true");
+                          ja.add(jo);
+
+                    }
+              } catch (ObjectNotFoundException e ) {
+
+            	  LOG.info("Inside abortProcessInstances - Cannot abort process for process OID : "
+                          + processInstanceOID + "\n" + e.getMessage());
+              jo.addProperty("aborted", "false");
+              ja.add(jo);
+
+              }
+
+        }
+        mainObj.add("ProcessDetails", ja);
+        return mainObj;
+  }
+
+	
+	/*public JsonObject getProcessDataPaths(JsonObject jsonObject) {
+
+        String processId = null;
+        boolean setDataPath = false;
+
+        processId = jsonObject.get("processId").getAsString();
+        if (jsonObject.get("setDataPath") != null) {
+               setDataPath = Boolean.parseBoolean(jsonObject.get("setDataPath").getAsString());
+               jsonObject.remove("setDataPath");
+        }
+        JsonObject mainObj;
+        JsonObject dataPathJson = null;
+
+        ProcessInstanceQuery piQuery = ProcessInstanceQuery.findForProcess(processId, false);
+        piQuery.setPolicy(DescriptorPolicy.WITH_DESCRIPTORS);
+        jsonObject.remove("processId");
+        Set<Map.Entry<String, JsonElement>> jsonMap = jsonObject.entrySet();
+
+        LOG.info("inside getProcessDataPaths  method : Process ID : " + processId);
+
+        for (Map.Entry<String, JsonElement> mapEntry : jsonMap) {
+
+               if (!mapEntry.getKey().equals("DataPaths")) {
+
+                     String[] dataElement = mapEntry.getKey().split("\\.");
+                     Number dataValue;
+                     if (dataElement.length > 1) {
+
+                            if (mapEntry.getValue().getAsJsonPrimitive().isNumber()) {
+                                   dataValue = mapEntry.getValue().getAsJsonPrimitive().getAsNumber();
+                                   if (dataValue instanceof Integer || dataValue instanceof Long) {
+                                          piQuery.where(DataFilter.isEqual(dataElement[0], dataElement[1],
+                                                        mapEntry.getValue().getAsLong()));
+                                   } else if (dataValue instanceof Float || dataValue instanceof Double) {
+                                          piQuery.where(DataFilter.isEqual(dataElement[0], dataElement[1],
+                                                        mapEntry.getValue().getAsDouble()));
+                                   }
+                            } else {
+                                   piQuery.where(
+                                                 DataFilter.isEqual(dataElement[0], dataElement[1], mapEntry.getValue().getAsString()));
+
+                            }
+
+                     } else {
+                            if (mapEntry.getValue().getAsJsonPrimitive().isNumber()) {
+                                   dataValue = mapEntry.getValue().getAsJsonPrimitive().getAsNumber();
+                                   if (dataValue instanceof Integer || dataValue instanceof Long) {
+                                          piQuery.where(DataFilter.isEqual(dataElement[0], mapEntry.getValue().getAsLong()));
+                                   } else if (dataValue instanceof Float || dataValue instanceof Double) {
+                                          piQuery.where(DataFilter.isEqual(dataElement[0], mapEntry.getValue().getAsDouble()));
+                                   }
+                            } else {
+                                   piQuery.where(DataFilter.isEqual(dataElement[0], mapEntry.getValue().getAsString()));
+
+                            }
+
+                     }
+
+               } else {
+                     if(setDataPath){
+                     LOG.info("Data Paths to set : " + mapEntry.getValue().getAsJsonObject());
+                     dataPathJson = mapEntry.getValue().getAsJsonObject();
+                     }
+
+               }
+                            }
+
+        ProcessInstances pis = getQueryService().getAllProcessInstances(piQuery);
+
+        LOG.info("Process Instance fetched  - Count : " + pis.getSize());
+
+        mainObj = fetchAndSetProcessDataPaths(pis, setDataPath, dataPathJson);
+        return mainObj;
+ }
+
+
+ private JsonObject fetchAndSetProcessDataPaths(ProcessInstances pis, boolean setDataPath, JsonObject dataPathJson) {
+        JsonObject jo = null;
+        JsonArray ja = new JsonArray();
+        JsonObject mainObj = new JsonObject();
+        String dataPathId = null;
+        String datPathValue = null;
+        long processInstanceOID = 0L;
+
+        
+               for (Iterator iterator = pis.iterator(); iterator.hasNext();) {
+        
+                     try {
+                     
+                     ProcessInstance pi = (ProcessInstance) iterator.next();
+                      processInstanceOID = pi.getOID();
+                     if (setDataPath) {
+                            LOG.info("Inside fetchAndSetProcessDataPaths - Data Paths to set : " + dataPathJson);
+                            Set<Map.Entry<String, JsonElement>> jsonMap = dataPathJson.entrySet();
+                            for (Map.Entry<String, JsonElement> mapEntry : jsonMap) {
+
+                                   dataPathId = mapEntry.getKey();
+                                   datPathValue = mapEntry.getValue().getAsString();
+
+                                   getWorkflowService().setOutDataPath(processInstanceOID, dataPathId, datPathValue);
+
+                            }
+                     }
+                     List<DataPath> dpList = pi.getDescriptorDefinitions();
+
+                     jo = new JsonObject();
+                     jo.addProperty("processOID", processInstanceOID);
+                     jo.addProperty("processStatus", pi.getState().getName());
+
+                     for (DataPath dp : dpList) {
+
+                            dataPathId = dp.getId();
+                            LOG.info("Inside fetchAndSetProcessDataPaths - Fetching Data Paths : " + dataPathId);
+
+                            datPathValue = pi.getDescriptorValue(dataPathId) != null
+                                          ? pi.getDescriptorValue(dataPathId).toString() : null;
+                            jo.addProperty(dataPathId, datPathValue);
+
+                     }
+
+                     ja.add(jo);
+               }catch (ObjectNotFoundException e) {
+
+                     LOG.info("Inside fetchAndSetProcessDataPaths - Cannot find data path : " + dataPathId + " : " + datPathValue
+                                   + " for process OID : " + processInstanceOID);
+
+               }
+
+        }             
+               mainObj.add("ProcessDetails", ja);
+        return mainObj;
+ }*/
+
+ 
+ 
+ 
+ //Experimental - it is being used by rest service to start new business process
+ 
+ public ProcessInstance startProcessById(String processId, Map<String, Object> dataMap) {
+     ProcessInstance process = this.getWorkflowService().startProcess(processId, dataMap, true);
+     return process;
+ }
+ 
+ // Experimental- to attach documents to a different process
+ 
+ public void attachDocuments(long fromProcessOid,long toProcessOid){
+	 List<Document> documents = this.getAttachedDocuments(fromProcessOid);
+	 this.addDocumentsToProcessAttachments(documents, toProcessOid);
+ }
+  
 
 }
