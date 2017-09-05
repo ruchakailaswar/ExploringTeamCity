@@ -320,7 +320,8 @@ public class IppService {
 				//jo.addProperty("createdDate", doc.getDateCreated() == null ? " " : formatedDate);
 				// jo.addProperty("lastModifiedDate", doc.getDateLastModified()
 				// == null ? " " : doc.getDateLastModified().toString());
-				jo.addProperty("version", doc.getRevisionName() == null ? " " : doc.getRevisionName());
+				//jo.addProperty("version", doc.getRevisionName() == null ? " " : doc.getRevisionName());
+				jo.addProperty("version", doc.getRevisionName() == null ? "1.0" : (doc.getRevisionName().equalsIgnoreCase("UNVERSIONED")? "1.0":doc.getRevisionName()));
 				jo.addProperty("docType", getDocumentTypeString(doc));
 			    //LOG.info("Properties :" + doc.getProperties());
 			    try{
