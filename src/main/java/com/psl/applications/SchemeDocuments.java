@@ -67,7 +67,7 @@ public class SchemeDocuments {
 						piQuery.setPolicy(DescriptorPolicy.WITH_DESCRIPTORS);
 
 						String[] dataElement = prop.getProperty(productType + "_PROCESS_DATAPATH").split("\\.");
-						piQuery.where(DataFilter.isEqual(dataElement[0], schemeNo));
+						piQuery.where(DataFilter.isEqual(dataElement[0], dataElement[1], schemeNo));
 						pis = sf.getQueryService().getAllProcessInstances(piQuery);
 						LOG.warn("AttachSchemeDocumentToCurrentProcess\n No Of Instances found : " + pis.getSize());
 
