@@ -24,10 +24,22 @@ import org.eclipse.stardust.engine.api.runtime.ProcessInstance;
 import org.eclipse.stardust.engine.api.runtime.ServiceFactory;
 import org.eclipse.stardust.engine.api.runtime.ServiceFactoryLocator;
 import org.eclipse.stardust.engine.api.runtime.WorkflowService;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import com.psl.beans.ApplicationConstants;
 
 public class SchemeDocuments {
+
+	@Autowired
+	IppService ippService;
+
+	public IppService getIppService() {
+		return this.ippService;
+	}
+
+	public void setIppService(IppService ippService) {
+		this.ippService = ippService;
+	}
 
 	private String ippPassword = "motu";
 	private String ippUser = "motu";
@@ -37,12 +49,14 @@ public class SchemeDocuments {
 	public String AttachSchemeDocumentToCurrentProcess(@ParameterName("productType") String productType,
 			@ParameterName("schemeNo") String schemeNo, @ParameterName("workType") String workType,
 			@ParameterName("targetProcessOID") Long targetProcessOID) {
-		String responseStatus = "\"Failure\"", response = null, processId = null;
+		String responseStatus = "\"Failure\"";
+		String response = null;
+		String processId = null;
 		ProcessInstances pis = null;
 		List<Document> docsList = null;
 		Properties prop = null;
 		InputStream is = null;
-		ServiceFactory sf = ServiceFactoryLocator.get(ippUser, ippPassword);
+		ServiceFactory sf = ServiceFactoryLocator.get(this.ippUser, this.ippPassword);
 		WorkflowService ws = sf.getWorkflowService();
 		try {
 			LOG.warn("AttachSchemeDocumentToCurrentProcess\n Product Type : " + productType + ", Scheme No : "
@@ -53,22 +67,31 @@ public class SchemeDocuments {
 				prop = new Properties();
 				prop.load(is);
 				String[] worktypesArr = prop.getProperty("workTypes").split(",");
-				worktypesArr = prop.getProperty("workTypes").split(",");
 
 				List<String> worktypesList = Arrays.asList(worktypesArr);
 
 				if (worktypesList.contains(workType)) {
-
+					String docTypes = prop.getProperty("docType");
 					processId = prop.getProperty(productType);
-					if (processId != null && schemeNo != null && targetProcessOID != 0L) {
+					String[] dataElement = prop.getProperty("PROCESS_DATAPATH").split("\\.");
+					if (processId != null && schemeNo != null && targetProcessOID.longValue() != 0L) {
 
 						LOG.warn("AttachSchemeDocumentToCurrentProcess\n Fetching Process Instance");
-						ProcessInstanceQuery piQuery = ProcessInstanceQuery.findForProcess(processId, false);
-						piQuery.setPolicy(DescriptorPolicy.WITH_DESCRIPTORS);
 
-						String[] dataElement = prop.getProperty(productType + "_PROCESS_DATAPATH").split("\\.");
-						piQuery.where(DataFilter.isEqual(dataElement[0], dataElement[1], schemeNo));
-						pis = sf.getQueryService().getAllProcessInstances(piQuery);
+						if (productType.equalsIgnoreCase("Liber8")) {
+							String[] processIDS = processId.split(",");
+							pis = fetchProcessInstances(productType, schemeNo, processIDS[0], dataElement, sf);
+							if ((pis == null) || (pis.size() == 0)) {
+								pis = fetchProcessInstances(productType, schemeNo, processIDS[1], dataElement, sf);
+								if ((pis == null) || (pis.size() == 0)) {
+									processId = prop.getProperty("Tier1");
+									pis = fetchProcessInstances("Tier1", schemeNo, processId, dataElement, sf);
+								}
+							}
+						} else {
+							pis = fetchProcessInstances(productType, schemeNo, processId, dataElement, sf);
+						}
+
 						LOG.warn("AttachSchemeDocumentToCurrentProcess\n No Of Instances found : " + pis.getSize());
 
 						if (pis != null && pis.size() > 0) {
@@ -91,6 +114,24 @@ public class SchemeDocuments {
 															+ processAttachment.getName() + ", Date Created "
 															+ processAttachment.getDateCreated() + ", Type : "
 															+ processAttachment.getDocumentType());
+
+											if (processAttachment.getProperty(
+													ApplicationConstants.META_DATA_DOCUMENT_TYPES.getValue()) == null) {
+												LOG.warn(processAttachment.getProperties() + "-----------"
+														+ processAttachment.getProperty(
+																ApplicationConstants.META_DATA_DOCUMENT_TYPES
+																		.getValue()));
+
+												processAttachment.setProperty(
+														ApplicationConstants.META_DATA_DOCUMENT_TYPES.getValue(),
+														"New Business");
+
+												LOG.warn(processAttachment.getProperties() + "-----------"
+														+ processAttachment.getProperty(
+																ApplicationConstants.META_DATA_DOCUMENT_TYPES
+																		.getValue()));
+											}
+
 											docsList.add(processAttachment);
 										}
 									} else {
@@ -115,7 +156,7 @@ public class SchemeDocuments {
 												+ docsList);
 							}
 							if (docsList != null && docsList.size() > 0) {
-								Object processData = ws.getInDataPath(targetProcessOID,
+								Object processData = ws.getInDataPath(targetProcessOID.longValue(),
 										ApplicationConstants.PROCESS_ATTACHMENTS.getValue());
 								if (processData != null) {
 									LOG.warn(
@@ -123,7 +164,7 @@ public class SchemeDocuments {
 													+ processData.getClass());
 									docsList.addAll((List) processData);
 								}
-								ws.setOutDataPath(targetProcessOID, ApplicationConstants.PROCESS_ATTACHMENTS.getValue(),
+								ws.setOutDataPath(targetProcessOID.longValue(), ApplicationConstants.PROCESS_ATTACHMENTS.getValue(),
 										docsList);
 								responseStatus = "\"Success\"";
 								return "{\"response\":" + responseStatus + "}";
@@ -191,6 +232,21 @@ public class SchemeDocuments {
 
 		}
 
+	}
+
+	private ProcessInstances fetchProcessInstances(String productType, String schemeNo, String processId,
+			String[] dataElement, ServiceFactory sf) {
+		LOG.warn("AttachSchemeDocumentToCurrentProcess" + processId);
+
+		ProcessInstanceQuery piQuery = ProcessInstanceQuery.findForProcess(processId, false);
+		piQuery.setPolicy(DescriptorPolicy.WITH_DESCRIPTORS);
+
+		piQuery.where(DataFilter.isEqual(dataElement[0], dataElement[1], schemeNo));
+
+		LOG.warn("AttachSchemeDocumentToCurrentProcess" + piQuery);
+
+		ProcessInstances pis = sf.getQueryService().getAllProcessInstances(piQuery);
+		return pis;
 	}
 
 }
