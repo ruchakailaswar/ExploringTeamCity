@@ -42,14 +42,17 @@ public class SchemeDocuments {
 		List<Document> docsList = null;
 		Properties prop = null;
 		InputStream is = null;
-		String[] worktypesArr;
 		ServiceFactory sf = ServiceFactoryLocator.get(ippUser, ippPassword);
 		WorkflowService ws = sf.getWorkflowService();
 		try {
+			LOG.warn("AttachSchemeDocumentToCurrentProcess\n Product Type : " + productType + ", Scheme No : "
+					+ schemeNo + "Work Type : " + workType + "Target Process OID : " + targetProcessOID);
+
 			is = getClass().getClassLoader().getResourceAsStream("producttype-processid-map.properties");
 			if (is != null) {
 				prop = new Properties();
 				prop.load(is);
+				String[] worktypesArr = prop.getProperty("workTypes").split(",");
 				worktypesArr = prop.getProperty("workTypes").split(",");
 
 				List<String> worktypesList = Arrays.asList(worktypesArr);
@@ -58,16 +61,16 @@ public class SchemeDocuments {
 
 					processId = prop.getProperty(productType);
 					if (processId != null && schemeNo != null && targetProcessOID != 0L) {
+
+						LOG.warn("AttachSchemeDocumentToCurrentProcess\n Fetching Process Instance");
 						ProcessInstanceQuery piQuery = ProcessInstanceQuery.findForProcess(processId, false);
 						piQuery.setPolicy(DescriptorPolicy.WITH_DESCRIPTORS);
 
 						String[] dataElement = prop.getProperty(productType + "_PROCESS_DATAPATH").split("\\.");
-						if (dataElement.length > 1) {
-							piQuery.where(DataFilter.isEqual(dataElement[0], dataElement[1], schemeNo));
-						} else {
-							piQuery.where(DataFilter.isEqual(dataElement[0], schemeNo));
-						}
+						piQuery.where(DataFilter.isEqual(dataElement[0], schemeNo));
 						pis = sf.getQueryService().getAllProcessInstances(piQuery);
+						LOG.warn("AttachSchemeDocumentToCurrentProcess\n No Of Instances found : " + pis.getSize());
+
 						if (pis != null && pis.size() > 0) {
 							for (ProcessInstance pi : pis) {
 								LOG.warn("Selected OID :: " + pi.getOID());
@@ -79,112 +82,115 @@ public class SchemeDocuments {
 									processAttachments = (List<Document>) processData;
 									if (processAttachments != null && !processAttachments.isEmpty()) {
 										LOG.warn(
-												"GetDocumentListService NEW REST API : processAttachments for processOID "
+												"AttachSchemeDocumentToCurrentProcess : Number of attachments for processOID "
 														+ pi.getOID() + " are " + processAttachments.size());
 										for (Document processAttachment : processAttachments) {
-											LOG.warn("GetDocumentListService NEW REST API : Document Detail -- "
-													+ processAttachment.getId() + " " + processAttachment.getName()
-													+ " " + processAttachment.getDateCreated());
 											LOG.warn(
-													"Fetching a processAttachments for processOID " + pi.getOID());
+													"AttachSchemeDocumentToCurrentProcess : Document Detail -- , Doc Id : "
+															+ processAttachment.getId() + ", Name "
+															+ processAttachment.getName() + ", Date Created "
+															+ processAttachment.getDateCreated() + ", Type : "
+															+ processAttachment.getDocumentType());
 											docsList.add(processAttachment);
 										}
 									} else {
 										LOG.warn(
-												"GetDocumentListService NEW REST API : processAttachments for processOID "
-														+ pi.getOID() + " are empty!");
+												"AttachSchemeDocumentToCurrentProcess : No attachments available for processOID "
+														+ pi.getOID() + "!!!!");
 									}
 								} catch (ObjectNotFoundException e) {
-									LOG.warn("Could not find Data Path "
+									LOG.warn("AttachSchemeDocumentToCurrentProcess : Could not find Data Path "
 											+ ApplicationConstants.PROCESS_ATTACHMENTS.getValue()
 											+ " on scope process Instance " + pi.getOID());
 								} catch (InvalidValueException e) {
-									LOG.warn("Could not get data for Data Path "
+									LOG.warn("AttachSchemeDocumentToCurrentProcess : Could not get data for Data Path "
 											+ ApplicationConstants.PROCESS_ATTACHMENTS.getValue()
 											+ " on scope process Instance " + pi.getOID());
 								}
 								if (docsList != null && docsList.size() > 0) {
 									break;
 								}
-								LOG.warn("And the document attached to process are :: " + docsList);
+								LOG.warn(
+										"AttachSchemeDocumentToCurrentProcess : the document/s attached to the process are :: "
+												+ docsList);
 							}
 							if (docsList != null && docsList.size() > 0) {
 								Object processData = ws.getInDataPath(targetProcessOID,
 										ApplicationConstants.PROCESS_ATTACHMENTS.getValue());
 								if (processData != null) {
-									LOG.warn("Previuos Attachments found in process and need to consider them as well: "
-											+ processData.getClass());
+									LOG.warn(
+											"AttachSchemeDocumentToCurrentProcess : Adding the existing attachments to the temp doc list "
+													+ processData.getClass());
 									docsList.addAll((List) processData);
 								}
 								ws.setOutDataPath(targetProcessOID, ApplicationConstants.PROCESS_ATTACHMENTS.getValue(),
 										docsList);
 								responseStatus = "\"Success\"";
-								response = "{\"response\":" + responseStatus + "}";
-								return response;
+								return "{\"response\":" + responseStatus + "}";
 							} else {
-								LOG.warn("No instance with attached document found for provided input");
-								response = "{\"response\":" + responseStatus + "}";
-								return response;
+								LOG.warn(
+										"AttachSchemeDocumentToCurrentProcess : No instance with attached document found for provided input");
+								return "{\"response\":" + responseStatus + "}";
 							}
 						} else {
-							LOG.warn("No instance found for provided input");
-							response = "{\"response\":" + responseStatus + "}";
-							return response;
+							LOG.warn("AttachSchemeDocumentToCurrentProcess : No instance found for provided input");
+							return "{\"response\":" + responseStatus + "}";
 						}
 					} else {
-						LOG.warn(processId == null ? "processId"
-								: schemeNo == null ? "schemeNo" : "targetProcessOID" + " Not Found");
-						response = "{\"response\":" + responseStatus + "}";
-						return response;
-
+						LOG.warn(schemeNo == null ? "schemeNo"
+								: "AttachSchemeDocumentToCurrentProcess : " + processId == null ? "processId"
+										: "targetProcessOID Not Found");
+						return "{\"response\":" + responseStatus + "}";
 					}
 				} else {
-					LOG.warn("Not supported for current work type");
+					LOG.warn("AttachSchemeDocumentToCurrentProcess : Not supported for current work type");
 					responseStatus = "\"Success\"";
-					response = "{\"response\":" + responseStatus + "}";
-					return response;
+					return "{\"response\":" + responseStatus + "}";
 				}
 			} else {
-				LOG.warn("Inputstream Object for reading properties file is null");
-				response = "{\"response\":" + responseStatus + "}";
-				return response;
+				LOG.warn(
+						"AttachSchemeDocumentToCurrentProcess : Inputstream Object for reading properties file is null");
+				return "{\"response\":" + responseStatus + "}";
 			}
 		} catch (ObjectNotFoundException e) {
-			LOG.warn("Could not find Data Path PROCESS_ATTACHMENTS on scope process Instance " + targetProcessOID);
+			LOG.warn(
+					"AttachSchemeDocumentToCurrentProcess : Could not find Data Path PROCESS_ATTACHMENTS on scope process Instance "
+							+ targetProcessOID);
 			e.printStackTrace();
-			response = "{\"response\":" + responseStatus + "}";
-			return response;
+			return "{\"response\":" + responseStatus + "}";
 		} catch (InvalidValueException e) {
-			LOG.warn("Could not set data for Data Path PROCESS_ATTACHMENTS on scope process Instance "
-					+ targetProcessOID);
+			LOG.warn(
+					"AttachSchemeDocumentToCurrentProcess : Could not set data for Data Path PROCESS_ATTACHMENTS on scope process Instance "
+							+ targetProcessOID);
 			e.printStackTrace();
-			response = "{\"response\":" + responseStatus + "}";
-			return response;
+			return "{\"response\":" + responseStatus + "}";
 		} catch (DocumentManagementServiceException e) {
-			LOG.warn("Could not set data for Data Path PROCESS_ATTACHMENTS on scope process Instance "
-					+ targetProcessOID);
+			LOG.warn(
+					"AttachSchemeDocumentToCurrentProcess : Could not set data for Data Path PROCESS_ATTACHMENTS on scope process Instance "
+							+ targetProcessOID);
 			e.printStackTrace();
-			response = "{\"response\":" + responseStatus + "}";
-			return response;
+			return "{\"response\":" + responseStatus + "}";
 		} catch (BadRequestException e) {
-			LOG.warn("Please check input parameters processId : " + processId + ", schemeNo : " + schemeNo
-					+ ", targetProcessOID : " + targetProcessOID + e.getStackTrace());
+			LOG.warn("AttachSchemeDocumentToCurrentProcess : Please check input parameters processId : " + processId
+					+ ", schemeNo : " + schemeNo + ", targetProcessOID : " + targetProcessOID + e.getStackTrace());
 			e.printStackTrace();
-			response = "{\"response\":" + responseStatus + "}";
-			return response;
+			return "{\"response\":" + responseStatus + "}";
 		} catch (FileNotFoundException e) {
-			LOG.warn("Unable to locate property file 'Producttype-processid-map.properties' in classpath"
-					+ e.getStackTrace());
+			LOG.warn(
+					"AttachSchemeDocumentToCurrentProcess : Unable to locate property file 'Producttype-processid-map.properties' in classpath"
+							+ e.getStackTrace());
 			e.printStackTrace();
-			response = "{\"response\":" + responseStatus + "}";
-			return response;
+			return "{\"response\":" + responseStatus + "}";
 		} catch (Exception e) {
-			LOG.warn("Exception inside getProcessInstanceByProcessIdAndSchemeNo  REST API : Getting Process instance !"
-					+ e.getStackTrace());
+			LOG.warn(
+					"AttachSchemeDocumentToCurrentProcess : Exception inside getProcessInstanceByProcessIdAndSchemeNo  REST API : Getting Process instance !"
+							+ e.getStackTrace());
 			e.printStackTrace();
 			response = "{\"response\":" + responseStatus + "}";
 			return response;
+
 		}
+
 	}
 
 }
