@@ -327,7 +327,7 @@ public class IppService {
 			    try{
 				jo.addProperty("MetaDataDocVersion",doc.getProperties().get(ApplicationConstants.META_DATA_MEMBER_NO.getValue()).toString());
 			    }catch(Exception e){
-			    	jo.addProperty("MetaDataDocVersion","1.0");
+			    	jo.addProperty("MetaDataDocVersion","memberno");
 			    }
 				//jo.addProperty("versionComment", doc.getRevisionComment());
 				ja.add(jo);
