@@ -3,7 +3,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.persistentsysltd</groupId>
   <artifactId>psl-liberty-services</artifactId>
-  <version>0.0.6</version>
+  <version>0.2.0</version>
 
 <!--  Shared version number properties 
  <properties>
@@ -171,7 +171,6 @@ Support for testing Spring applications with tools such as JUnit and TestNG
     
 </dependencies>
 
-
   <build>
     <plugins>
       <plugin>
@@ -188,6 +187,5 @@ Support for testing Spring applications with tools such as JUnit and TestNG
          </executions>
       </plugin>
     </plugins>
-  </build>
-   -->
+  </build>-->
 </project>

@@ -267,5 +267,76 @@ public class DocumentServices {
 
 
 
+	@POST
+	@Path("removeDocument")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Response removeDocument(String input) {
+
+
+		LOG.info("Remove Document REST API : Started Remove Document !");
+
+		JsonObject response = null;
+
+		JsonObject jsonObject = ippService.parseJSONObject(input);
+		String docId = jsonObject.get("docId").getAsString();
+        long processOid = jsonObject.get("processOid").getAsLong();
+		try {
+
+			//ippService.deleteDocuments(docId);
+           ippService.removeDocument(docId, processOid);
+			response = new JsonObject();
+			response.addProperty("Success", true);
+			response.addProperty("DocumentId", docId);
+
+		} catch (Exception e) {
+			LOG.info("Remove Document REST API : Exception removeDocument -- " + e);
+			LOG.info("Remove Document REST API : Exception removeDocument -- " + e.getStackTrace());
+			LOG.info("Remove Document REST API : Exception removeDocument -- " + e.getCause());
+			e.printStackTrace();
+		}
+
+		if (response != null) {
+			return Response.ok(response.toString(), MediaType.APPLICATION_JSON_TYPE).header("Access-Control-Allow-Origin", "*").build();
+		} else {
+			return Response.serverError().build();
+		}
+	}
+	
+	// Experimental - by Prateek
+	
+		@POST
+		@Path("attachDocumentsToProcess")
+		@Produces(MediaType.APPLICATION_JSON)
+		public Response attachDocumentsToProcess(String input) {
+
+
+			LOG.info("Attach Document REST API : Started Attaching Document !");
+
+			JsonObject response = null;
+
+			JsonObject jsonObject = ippService.parseJSONObject(input);
+			long fromProcessOid = jsonObject.get("fromProcessOid").getAsLong();
+	        long toProcessOid = jsonObject.get("toProcessOid").getAsLong();
+			try {
+
+				//ippService.deleteDocuments(docId);
+	           ippService.attachDocuments(fromProcessOid, toProcessOid);
+				response = new JsonObject();
+				response.addProperty("Success", true);
+				//response.addProperty("DocumentId", docId);
+
+			} catch (Exception e) {
+				LOG.info("Attach Document REST API : Exception AttachDocument -- " + e);
+				LOG.info("Attach Document REST API : Exception AttachDocument -- " + e.getStackTrace());
+				LOG.info("Attach Document REST API : Exception AttachDocument -- " + e.getCause());
+				e.printStackTrace();
+			}
+
+			if (response != null) {
+				return Response.ok(response.toString(), MediaType.APPLICATION_JSON_TYPE).header("Access-Control-Allow-Origin", "*").build();
+			} else {
+				return Response.serverError().build();
+			}
+		}
 
 }
