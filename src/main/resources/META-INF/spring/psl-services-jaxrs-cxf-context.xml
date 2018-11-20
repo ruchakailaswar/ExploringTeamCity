@@ -18,14 +18,12 @@
 		</cxf:features>
 	</cxf:bus>
 
-<!-- This getDocumentListService would be removed, once the changes are done in the UIs -->
-
 	<jaxrs:server id="pslRestServer" address="/psl-liberty">
 		<jaxrs:serviceBeans>
 			<ref bean="documentServicesPSL" />
 			<ref bean="serviceCallDetailsPSL" />
-            <ref bean="getDocumentListService" />
 			<ref bean="processDetailsServicesPSL" />
+			<ref bean="deploymentServicesPSL" />
 		</jaxrs:serviceBeans>
 	</jaxrs:server>
 

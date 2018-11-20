@@ -20,10 +20,6 @@
 	<bean id="documentServicesPSL" class="com.psl.services.DocumentServices">
 		<property name="ippService" ref="ippService" />
 	</bean>
-	<!-- This getDocumentListService would be removed, once the changes are done in the UIs -->
-	<bean id="getDocumentListService" class="com.psl.services.GetDocumentListService">
-		<property name="ippService" ref="ippService" />
-	</bean>
 
 	<bean id="serviceCallDetailsPSL" class="com.psl.services.ServiceCallDetails">
 		<property name="ippService" ref="ippService" />
@@ -34,5 +30,15 @@
 		<property name="ippService" ref="ippService" />
 	</bean>
 	
-
+	<bean id="attachDocumentServicesPSL" class="com.psl.applications.AttachDocuments">
+		<property name="ippService" ref="ippService" />
+	</bean>
+	
+	<bean id="schemeDocumentServicesPSL" class="com.psl.applications.SchemeDocuments">
+		<property name="ippService" ref="ippService" />
+	</bean>
+	
+	<bean id="deploymentServicesPSL" class="com.psl.services.DeploymentServices">
+		<property name="ippService" ref="ippService" />
+	</bean>
 </beans>
