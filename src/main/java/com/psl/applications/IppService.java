@@ -2,11 +2,14 @@ package com.psl.applications;
 
 import static org.eclipse.stardust.engine.core.spi.dms.RepositoryIdUtils.stripRepositoryId;
 
+import java.awt.image.BufferedImage;
+import java.awt.image.RenderedImage;
 import java.io.*;
+import java.util.*;
 
+import javax.media.jai.RenderedImageAdapter;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-import java.util.*;
 
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 import org.apache.poi.ss.usermodel.*;
@@ -24,20 +27,15 @@ import org.eclipse.stardust.engine.core.preferences.configurationvariables.Confi
 import org.eclipse.stardust.engine.core.runtime.beans.AbortScope;
 
 import com.google.gson.*;
+import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Image;
 import com.itextpdf.text.Rectangle;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.itextpdf.text.pdf.RandomAccessFileOrArray;
 import com.itextpdf.text.pdf.codec.TiffImage;
 import com.psl.beans.ApplicationConstants;
-
 import com.sun.media.jai.codec.ImageCodec;
 import com.sun.media.jai.codec.ImageDecoder;
-import com.itextpdf.text.ImgRaw;
-import com.itextpdf.text.DocumentException;
-import javax.media.jai.RenderedImageAdapter;
-import java.awt.image.RenderedImage;
-import java.awt.image.BufferedImage;
 
 public class IppService {
 
@@ -45,7 +43,10 @@ public class IppService {
 	private String ippPassword;
 	private String ippUser;
 	static final Logger LOG = LogManager.getLogger(IppService.class);
-
+	private String[] activityIds;
+    private String[] processIds;
+    private HashSet<String> actIds;
+    
 	public IppService() {
 
 	}
@@ -95,6 +96,24 @@ public class IppService {
 	public void setIppUser(String ippUser) {
 		this.ippUser = ippUser;
 	}
+	
+	
+	public String[] getActivityIds() {
+        return activityIds;
+    }
+
+    public void setActivityIds(String[] activityIds) {
+        this.activityIds = activityIds;
+        this.actIds = new HashSet<String>(Arrays.asList(activityIds));
+    }
+    
+    public String[] getProcessIds() {
+        return processIds;
+    }
+
+    public void setProcessIds(String[] processIds) {
+        this.processIds = processIds;
+    }    
 
 	/**
 	 * Method to get the service factory
@@ -151,6 +170,83 @@ public class IppService {
 		}
 	}
 
+	/**
+	 * Fetches the activites details of the process based on the processOID activityIds for Scanning and Indexing process 
+	 * @param processOid
+	 * 
+	 * @return List<Map<String,String>>
+	 */
+	public List<Map<String, String>> getActivitiesDetailsForIndexing(long processOid) {
+
+		String activityName = null;
+		String modelParticipantName = null;
+		String activityState = null;
+		String startTime = null;
+		String lastModificationTime = null;
+		String userName = null;
+		List<Map<String, String>> activitiesList = new ArrayList<Map<String, String>>();
+
+		ActivityInstanceQuery activityQuery = ActivityInstanceQuery.findAlive();
+		activityQuery.where(new ProcessInstanceFilter(processOid));
+        
+		/*FilterOrTerm orFilter = activityQuery.getFilter().addOrTerm();
+		orFilter.add(new ProcessInstanceFilter(processOid));*/
+		
+		/*for (int x = 0; x < roleNamesArr.length; x++) {
+		   grant = roleNamesArr[x];
+		   PerformingParticipantFilter performerFilter = PerformingParticipantFilter.forModelParticipant(grant);
+		   orFilter.or(performerFilter);
+		}*/
+		
+		List<ActivityInstance> activityList = getQueryService().getAllActivityInstances(activityQuery);
+		
+        boolean foundWaitActivity = false;
+        for (ActivityInstance ai : activityList) {
+            if(actIds.contains(ai.getActivity().getId())){
+            	Map<String, String> activityDetailsMap = new HashMap<String, String>();
+            	Activity activity = ai.getActivity();
+            	activityName = activity.getName();
+
+				ModelParticipant modelParticipant = activity.getDefaultPerformer();
+				modelParticipantName = (modelParticipant != null) ? modelParticipant.getName() : null;
+
+				UserInfo userInfo = ai.getPerformedBy();
+				userName = (userInfo != null) ? userInfo.getFirstName() + " " + userInfo.getLastName() : null;
+
+				ActivityInstanceState state = ai.getState();
+				if (state != null) {
+					activityState = state.getName();
+				}
+
+				if (ai.getStartTime() != null) {
+					startTime = ai.getStartTime().toString();
+
+				}
+				if (ai.getLastModificationTime() != null) {
+					lastModificationTime = ai.getLastModificationTime().toString();
+				}
+
+				activityDetailsMap.put("activityInstanceOid", Long.toString(ai.getOID()));
+				activityDetailsMap.put("activityName", activityName);
+				activityDetailsMap.put("modelParticipant", modelParticipantName);
+				activityDetailsMap.put("performedBy", userName);
+				activityDetailsMap.put("state", activityState);
+				activityDetailsMap.put("startTime", startTime);
+				activityDetailsMap.put("lastModificationTime", lastModificationTime);
+
+				activitiesList.add(activityDetailsMap);
+                foundWaitActivity = true;
+                break;
+            }
+            if (foundWaitActivity) {
+                break;
+            }
+        }
+        
+		LOG.info("Activity Details :" + activitiesList);
+		return activitiesList;
+	}
+	
 	/**
 	 * Fetches the documents attached to process instance, oid passed
 	 * 
@@ -595,7 +691,7 @@ public class IppService {
 
 			processDetails.put("startTime", processInstance.getStartTime().toString());
 			LOG.info("Process Details :" + processDetails);
-			if (processState != null && !(processState.getValue() == ProcessInstanceState.ACTIVE)) {
+			if (processState != null && !(processState.getValue() == ProcessInstanceState.ACTIVE || processState.getValue() == ProcessInstanceState.INTERRUPTED)) {
 				processDetails.put("endTime", processInstance.getTerminationTime().toString());
 			}
 			LOG.info("Process Details :" + processDetails);
@@ -604,6 +700,85 @@ public class IppService {
 		return processDetails;
 	}
 
+	/**
+	 * Fetches processes based on the data filters (Data ID) for Scanning and Indexing process search
+	 * 
+	 * @param jsonObject
+	 * @return ProcessInstances
+	 */
+	public ProcessInstances fetchProcessInstancesForIds(JsonObject jsonObject) {
+		ProcessInstances pis = null;
+		String completedProcesses = "";
+		completedProcesses = jsonObject.get("showCompleted") != null && !jsonObject.get("showCompleted").isJsonNull() ? jsonObject.get("showCompleted").getAsString() : "";
+		ProcessInstanceQuery piQuery = null;
+
+		try{
+			if(completedProcesses.equalsIgnoreCase("Yes")){
+				ProcessInstanceState[] states = {ProcessInstanceState.Aborted, ProcessInstanceState.Completed};
+				piQuery = ProcessInstanceQuery.findInState(states);
+			} else{
+				piQuery = ProcessInstanceQuery.findAlive();
+			} 
+			
+			FilterOrTerm processIdOrTerm = piQuery.getFilter().addOrTerm();
+	        for (String processId : processIds) {
+	            processIdOrTerm.add(new ProcessDefinitionFilter(processId, false));
+	        }
+			
+			//piQuery.setPolicy(DescriptorPolicy.WITH_DESCRIPTORS);
+			Set<Map.Entry<String, JsonElement>> jsonMap = jsonObject.entrySet();
+	
+			for (Map.Entry<String, JsonElement> mapEntry : jsonMap) {
+	
+				String[] dataElement = mapEntry.getKey().split("\\.");
+				Number dataValue;
+				if (dataElement.length > 1) {
+					if(dataElement[0].equals("IndexData") && dataElement[1].equals("WorkType")){
+						continue;
+					}
+					else if (mapEntry.getValue().getAsJsonPrimitive().isNumber()) {
+						dataValue = mapEntry.getValue().getAsJsonPrimitive().getAsNumber();
+						if (dataValue instanceof Integer || dataValue instanceof Long) {
+							piQuery.where(
+									DataFilter.isEqual(dataElement[0], dataElement[1], mapEntry.getValue().getAsLong()));
+						} else if (dataValue instanceof Float || dataValue instanceof Double) {
+							piQuery.where(
+									DataFilter.isEqual(dataElement[0], dataElement[1], mapEntry.getValue().getAsDouble()));
+						}
+					} else {
+						piQuery.where(
+								DataFilter.isEqual(dataElement[0], dataElement[1], mapEntry.getValue().getAsString()));
+	
+					}
+	
+				} else {
+					if(dataElement[0].equals("showCompleted")){
+						continue;
+					}
+					else if (mapEntry.getValue().getAsJsonPrimitive().isNumber()) {
+						dataValue = mapEntry.getValue().getAsJsonPrimitive().getAsNumber();
+						if (dataValue instanceof Integer || dataValue instanceof Long) {
+							piQuery.where(DataFilter.isEqual(dataElement[0], mapEntry.getValue().getAsLong()));
+						} else if (dataValue instanceof Float || dataValue instanceof Double) {
+							piQuery.where(DataFilter.isEqual(dataElement[0], mapEntry.getValue().getAsDouble()));
+						}
+					} else {
+						piQuery.where(DataFilter.isEqual(dataElement[0], mapEntry.getValue().getAsString()));
+					}
+				}
+			}
+	
+			pis = getQueryService().getAllProcessInstances(piQuery);
+			LOG.info("Process Instance fetched  - Count : " + pis.getSize());
+		}
+		catch(Exception e){
+			LOG.info("Exception inside fetchProcessInstancesForIds while fetching process details 1" + e.getMessage());
+			LOG.info("Exception inside fetchProcessInstancesForIds while fetching process details 2" + e.getCause());
+			LOG.info("Exception inside fetchProcessInstancesForIds while fetching process details 3" + e.fillInStackTrace());
+		}
+		return pis;
+	}
+	
 	/**
 	 * Parses the received string and forms the JSON Object
 	 * 
@@ -1872,3 +2047,4 @@ public class IppService {
 	}
 
 }
+

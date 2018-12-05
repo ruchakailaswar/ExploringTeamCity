@@ -1,16 +1,17 @@
 package com.psl.services;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.net.URLConnection;
 import java.util.*;
+import java.io.*;
 
 import javax.activation.DataHandler;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.*;
 import javax.ws.rs.core.*;
 import javax.ws.rs.core.Response.Status;
-
 import org.apache.commons.io.IOUtils;
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
@@ -20,8 +21,11 @@ import org.eclipse.stardust.common.log.Logger;
 import org.eclipse.stardust.engine.api.runtime.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.psl.applications.DocumentRepositoryServices;
 import com.psl.applications.IppService;
 import com.psl.beans.ApplicationConstants;
 
@@ -39,6 +43,9 @@ public class DocumentServices {
 	public void setIppService(IppService ippService) {
 		this.ippService = ippService;
 	}
+
+	@Autowired
+	DocumentRepositoryServices documentRepositoryServices;
 
 	private static final Logger LOG = LogManager.getLogger(DocumentServices.class);
 
@@ -64,14 +71,12 @@ public class DocumentServices {
 				processOID = Long.parseLong(processOid);
 
 				docsList = ippService.getAttachedDocuments(processOID);
-				
-				Collections.sort(docsList, new Comparator<Document>() 
-                {
-                         public int compare(Document d1, Document d2) {
-                                return d2.getDateCreated().compareTo(d1.getDateCreated());
-                         }
-                });
 
+				Collections.sort(docsList, new Comparator<Document>() {
+					public int compare(Document d1, Document d2) {
+						return d2.getDateCreated().compareTo(d1.getDateCreated());
+					}
+				});
 
 			} catch (Exception e) {
 				LOG.info("getDocuments REST API : Exception getProcessDocumentsIPPForAProcess -- " + e);
@@ -579,10 +584,9 @@ public class DocumentServices {
 		}
 	}
 
-
 	/**
-	 * Deprecated
-	 * This is the web service which utilises the methods of IPP service class which cater for single strip tiff documents only
+	 * Deprecated This is the web service which utilises the methods of IPP
+	 * service class which cater for single strip tiff documents only
 	 * 
 	 * @param processOid
 	 * @return
@@ -617,12 +621,11 @@ public class DocumentServices {
 			return Response.serverError().build();
 		}
 	}
-	
-	
-	
+
 	/**
-	 * This is the web service which utilises the methods of IPP service class which 
-	 * cater for single as well as multi strip tiff document conversion to PDF
+	 * This is the web service which utilises the methods of IPP service class
+	 * which cater for single as well as multi strip tiff document conversion to
+	 * PDF
 	 * 
 	 * @param attachment
 	 * @param Path
@@ -648,13 +651,15 @@ public class DocumentServices {
 				int counter = Integer.parseInt(properties.getProperty("counter"));
 				int batchSize = Integer.parseInt(properties.getProperty("batch"));
 				int checkpoint = Integer.parseInt(properties.getProperty("checkpoint"));
-				LOG.info("Read Properties file, details are: Counter = " + counter + "\n Batch size = " + batchSize+"\n Checkpoint = "+ checkpoint);
+				LOG.info("Read Properties file, details are: Counter = " + counter + "\n Batch size = " + batchSize
+						+ "\n Checkpoint = " + checkpoint);
 
 				int counterLimit = counter + batchSize;
 				if (length < counterLimit) {
 					counterLimit = length;
 				}
-				// Looping the document ID's from counter till batch size read from properties file
+				// Looping the document ID's from counter till batch size read
+				// from properties file
 				for (int i = counter; i < counterLimit;) {
 
 					int checkpointLimit = checkpoint;
@@ -662,14 +667,17 @@ public class DocumentServices {
 						checkpointLimit = counterLimit - i;
 					}
 					List<String> documentIds = new ArrayList<String>();
-					// Adding the checkpoint number of documentIDs to arraylist for converting the document 
+					// Adding the checkpoint number of documentIDs to arraylist
+					// for converting the document
 					for (int j = 0; j < checkpointLimit; j++, i++) {
 						documentIds.add(documentContentLines.get(i));
 					}
-					LOG.info("Inside convertDocBatch REST API Method -- Calling convertDocTiffToPDFBatch method and passimg the doc IDs list");
+					LOG.info(
+							"Inside convertDocBatch REST API Method -- Calling convertDocTiffToPDFBatch method and passimg the doc IDs list");
 					ippService.convertDocTiffToPDFBatch(documentIds);
 
-					LOG.info("Inside convertDocBatch REST API Method -- Updating the properties file with counter as :"+ i);
+					LOG.info("Inside convertDocBatch REST API Method -- Updating the properties file with counter as :"
+							+ i);
 					properties.setProperty("counter", Integer.toString(i));
 					ippService.writeExternalPropertiesFile(properties, Path);
 
@@ -694,11 +702,10 @@ public class DocumentServices {
 			return Response.serverError().build();
 		}
 	}
-	
-	
+
 	/**
-	 * This is the web service which utilises the methods of IPP service class which 
-	 * assigns docType to documents not having docType assigned to them  
+	 * This is the web service which utilises the methods of IPP service class
+	 * which assigns docType to documents not having docType assigned to them
 	 * 
 	 * @param attachment
 	 * @param Path
@@ -713,7 +720,7 @@ public class DocumentServices {
 		JsonObject response = null;
 		DataHandler dataHandler = attachment.getDataHandler();
 		InputStream inputStream;
-		
+
 		try {
 			inputStream = dataHandler.getInputStream();
 			List<String> documentContentLines = IOUtils.readLines(inputStream);
@@ -723,13 +730,14 @@ public class DocumentServices {
 				int counter = Integer.parseInt(properties.getProperty("counter"));
 				int batchSize = Integer.parseInt(properties.getProperty("batch"));
 				int checkpoint = Integer.parseInt(properties.getProperty("checkpoint"));
-				LOG.info("Counter = " + counter + "\n Batch size = " + batchSize+"\n Checkpoint = "+ checkpoint);
+				LOG.info("Counter = " + counter + "\n Batch size = " + batchSize + "\n Checkpoint = " + checkpoint);
 
 				int counterLimit = counter + batchSize;
 				if (length < counterLimit) {
 					counterLimit = length;
 				}
-				// Looping the document ID's from counter till batch size read from properties file
+				// Looping the document ID's from counter till batch size read
+				// from properties file
 				for (int i = counter; i < counterLimit;) {
 
 					int checkpointLimit = checkpoint;
@@ -737,16 +745,17 @@ public class DocumentServices {
 						checkpointLimit = counterLimit - i;
 					}
 					List<String> documentIds = new ArrayList<String>();
-					// Adding the checkpoint number of documentIDs to arraylist for updating the docType 
+					// Adding the checkpoint number of documentIDs to arraylist
+					// for updating the docType
 					for (int j = 0; j < checkpointLimit; j++, i++) {
-						LOG.info("jcrId = "+documentContentLines.get(i));
+						LOG.info("jcrId = " + documentContentLines.get(i));
 						documentIds.add(documentContentLines.get(i).split(",")[0]);
 					}
 					ippService.doctypeAssignment(documentIds);
-					
+
 					properties.setProperty("counter", Integer.toString(i));
 					ippService.writeExternalPropertiesFile(properties, Path);
-					
+
 				}
 			} else {
 				LOG.info("No documents to assign DocType");
@@ -769,4 +778,203 @@ public class DocumentServices {
 		}
 	}
 
+	/**
+	 * The service performs editing of multiple documents in one call!
+	 * 
+	 * @param input
+	 * @return
+	 */
+	@POST
+	@Path("editMultiDocumentsType")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Response editMultiDocumentsType(String input) {
+
+		LOG.info("editMultiDocumentsType REST API : Started Edit Documents !");
+
+		JsonArray mainJsonArray = new JsonArray();
+		JsonObject response = null;
+		String memberNo = null, schemeNo = null, workType = null;
+		try {
+			JsonObject jsonObject = ippService.parseJSONObject(input);
+			JsonArray jsonArray = jsonObject.getAsJsonArray("documentList");
+			for (JsonElement jsonElement : jsonArray) {
+				try {
+					response = new JsonObject();
+					JsonObject jObject = jsonElement.getAsJsonObject();
+					String docId = jObject.get(ApplicationConstants.DOC_ID.getValue()).getAsString();
+
+					response.addProperty("DocumentId", docId);
+
+					Document document = ippService.getDocumentManagementService().getDocument(docId);
+					Map<String, Object> existingProperties = document.getProperties();
+					try {
+						memberNo = jObject.get("memberNo").getAsString();
+					} catch (Exception e) {
+						try {
+							memberNo = (String) existingProperties
+									.get(ApplicationConstants.META_DATA_MEMBER_NO.getValue());
+						} catch (Exception e1) {
+							memberNo = null;
+						}
+					}
+					try {
+						schemeNo = jObject.get("schemeNo").getAsString();
+					} catch (Exception e) {
+						try {
+							schemeNo = (String) existingProperties
+									.get(ApplicationConstants.META_DATA_SCHEME_NO.getValue());
+						} catch (Exception e1) {
+							schemeNo = null;
+						}
+					}
+					try {
+						workType = jObject.get("workType").getAsString();
+					} catch (Exception e) {
+						try {
+							workType = (String) existingProperties
+									.get(ApplicationConstants.META_DATA_REQUEST_TYPE.getValue());
+						} catch (Exception e1) {
+							workType = null;
+						}
+					}
+
+					String processOid = jObject.get("processOid").getAsString();
+					String docTypes = jObject.get("docTypes").getAsString();
+
+					Map<String, Object> metaDataMap = ippService.populateDocumentProperties(schemeNo, memberNo,
+							workType, docTypes);
+
+					LOG.info("editMultiDocumentsType REST API : Document Properties : " + metaDataMap);
+
+					Document returnDoc = ippService.updateNonSecureDocument(docId, Long.parseLong(processOid),
+							metaDataMap);
+
+					LOG.info("editMultiDocumentsType REST API : Returned Doc- Doc name : " + returnDoc.getName());
+					LOG.info("editMultiDocumentsType REST API : Returned Doc - docId: " + returnDoc.getId());
+					LOG.info("editMultiDocumentsType REST API : Returned Doc - properties : "
+							+ returnDoc.getProperties());
+
+					response.addProperty("Success", true);
+
+				} catch (Exception e) {
+					response.addProperty("Success", false);
+					LOG.info("editMultiDocumentsType REST API : Exception editMultiDocumentsType -- " + e);
+					LOG.info("editMultiDocumentsType REST API : Exception editMultiDocumentsType -- "
+							+ e.getStackTrace());
+					LOG.info("editMultiDocumentsType REST API : Exception editMultiDocumentsType -- " + e.getCause());
+					e.printStackTrace();
+				}
+				mainJsonArray.add(response);
+			}
+
+		} catch (Exception e) {
+			LOG.info("editMultiDocumentsType REST API : Exception editMultiDocumentsType -- " + e);
+			LOG.info("editMultiDocumentsType REST API : Exception editMultiDocumentsType -- " + e.getStackTrace());
+			LOG.info("editMultiDocumentsType REST API : Exception editMultiDocumentsType -- " + e.getCause());
+			e.printStackTrace();
+		}
+
+		if (mainJsonArray.size() > 0) {
+			return Response.ok(mainJsonArray.toString(), MediaType.APPLICATION_JSON_TYPE)
+					.header("Access-Control-Allow-Origin", "*").build();
+		} else {
+			return Response.serverError().build();
+		}
+	}
+
+	/**
+	 * This method will download, split, merge and upload the splitted centera
+	 * pdf documents
+	 * 
+	 * @param input
+	 * @return
+	 */
+	@POST
+	@Path("splitAndMerge")
+	@Produces(MediaType.APPLICATION_JSON)
+	@Consumes(MediaType.APPLICATION_JSON)
+	public Response splitAndMergePdfDocument(String input) {
+		LOG.info("Splitting and Merging documents : Started");
+		JsonObject response = null;
+		JsonObject jsonObject = ippService.parseJSONObject(input);
+		JsonObject documentSplitterObject = null;
+		String dmsIdString = "";
+		String basePath = "";
+		String server = "";
+		String[] dmsArr;
+		String memberNo = "";
+		String schemeNo = "";
+		String fileLocation = "";
+		if (jsonObject.get("dmsIDs") != null) {
+			dmsIdString = jsonObject.get("dmsIDs").getAsString();
+			dmsArr = dmsIdString.split(",");
+			jsonObject.remove("dmsIDs");
+		} else {
+			return Response.status(400).entity("{\"response\":\"'dmsIDs' parameter missing in request body.\"}")
+					.build();
+		}
+
+		if (jsonObject.get("server") != null) {
+			server = jsonObject.get("server").getAsString();
+			jsonObject.remove("server");
+		} else {
+			return Response.status(400).entity("{\"response\":\"'server' parameter missing in request body.\"}")
+					.build();
+		}
+
+		if (jsonObject.get("path") != null) {
+			basePath = jsonObject.get("path").getAsString();
+			jsonObject.remove("path");
+		} else {
+			return Response.status(400).entity("{\"response\":\"'path' parameter missing in request body.\"}").build();
+		}
+
+		if (jsonObject.get("documentSplitter") != null) {
+			documentSplitterObject = jsonObject.get("documentSplitter").getAsJsonObject();
+			jsonObject.remove("documentSplitter");
+		} else {
+			return Response.status(400)
+					.entity("{\"response\":\"'documentSplitter' parameter missing in request body.\"}").build();
+		}
+
+		if (jsonObject.get("memberNo") != null) {
+			memberNo = jsonObject.get("memberNo").getAsString();
+		}
+		if (jsonObject.get("schemeNo") != null) {
+			schemeNo = jsonObject.get("schemeNo").getAsString();
+		}
+
+		List<String> deleteFileLocations = new ArrayList<String>();
+		ArrayList<String> OriginalFileLocation = new ArrayList<String>();
+		for (int i = 0; i < dmsArr.length; i++) {
+			fileLocation = documentRepositoryServices.fetchAndSaveDocumentFromRepository(dmsArr[i], basePath, server);
+			OriginalFileLocation.add(fileLocation);
+			deleteFileLocations.add(fileLocation);
+		}
+
+		LinkedHashMap<String, LinkedHashMap<String, String>> specificationMap = documentRepositoryServices
+				.formatSplittingSpecification(OriginalFileLocation, documentSplitterObject, dmsArr);
+
+		Map<String, String> mergedDocuments = new HashMap<String, String>();
+		mergedDocuments = documentRepositoryServices.mergePdfDocuments(specificationMap, memberNo, schemeNo, basePath);
+		deleteFileLocations.addAll(mergedDocuments.values());
+
+		response = documentRepositoryServices.uploadDocumentToRepository(mergedDocuments, jsonObject, server);
+
+		for (String documentLocation : deleteFileLocations) {
+			File file = new File(documentLocation);
+			if (file.delete()) {
+				LOG.info(documentLocation + " is deleted");
+			} else {
+				LOG.info("Couldn't delete file " + documentLocation);
+			}
+		}
+
+		if (response != null) {
+			return Response.ok(response.toString(), MediaType.APPLICATION_JSON_TYPE)
+					.header("Access-Control-Allow-Origin", "*").build();
+		} else {
+			return Response.serverError().build();
+		}
+	}
 }
