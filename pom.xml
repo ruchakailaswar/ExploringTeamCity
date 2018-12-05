@@ -3,7 +3,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.persistentsysltd</groupId>
   <artifactId>psl-liberty-services</artifactId>
-  <version>0.4.1</version> 
+  <version>0.4.5</version> 
 
 <!--  Shared version number properties   -->
  <properties>
@@ -14,9 +14,27 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
     <javax.rs.version>2.0</javax.rs.version>
     <maven-source-pulgin.version>3.0.1</maven-source-pulgin.version>
 	<maven.compiler.target>1.6</maven.compiler.target>
+	<maven.compiler.testTarget>1.6</maven.compiler.testTarget>
 </properties>
 
 <dependencies>
+
+<!-- https://mvnrepository.com/artifact/org.mockito/mockito-core -->
+<dependency>
+    <groupId>org.mockito</groupId>
+    <artifactId>mockito-core</artifactId>
+    <version>2.23.0</version>
+    <scope>test</scope>
+</dependency>
+
+<!-- https://mvnrepository.com/artifact/junit/junit -->
+<dependency>
+    <groupId>junit</groupId>
+    <artifactId>junit</artifactId>
+    <version>4.11</version>
+    <scope>test</scope>
+</dependency>
+
 
 <!-- https://mvnrepository.com/artifact/com.itextpdf/itextpdf -->
 <dependency>
