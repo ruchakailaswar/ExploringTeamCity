@@ -99,16 +99,17 @@ public class IppService {
 	
 	
 	public String[] getActivityIds() {
-        return activityIds;
+		return activityIds;
     }
 
     public void setActivityIds(String[] activityIds) {
+    
         this.activityIds = activityIds;
         this.actIds = new HashSet<String>(Arrays.asList(activityIds));
     }
     
     public String[] getProcessIds() {
-        return processIds;
+       return processIds;
     }
 
     public void setProcessIds(String[] processIds) {
@@ -199,6 +200,8 @@ public class IppService {
 		}*/
 		
 		List<ActivityInstance> activityList = getQueryService().getAllActivityInstances(activityQuery);
+		String[] activityIds = {"VettingActivity_WaitingforDocuments","PendActivity","WaitingForBoardApproval","WaitingForFSB","PendActivity2","ConcessionPend","Wait_ReminderDelay","DynamicUIActivity"};
+		HashSet<String> actIds = new HashSet<String>(Arrays.asList(activityIds));
 		
         boolean foundWaitActivity = false;
         for (ActivityInstance ai : activityList) {
@@ -719,6 +722,8 @@ public class IppService {
 			} else{
 				piQuery = ProcessInstanceQuery.findAlive();
 			} 
+			
+			String[] processIds = {"{L1GenericModel}L1GenericProcess","{NewBusinessModel}VettingAndInstallationProcess","{NewBusinessModel}FSBRegistrationProcess","{NewBusinessModel}RatificationCommonSubProcess","{NewBusinessModel}SpecialRulesGenerationProcess","{AMLModel}AMLProcess","{ConfigurableReminder}ReminderProcess","{DynamicModel}DynamicProcess"};
 			
 			FilterOrTerm processIdOrTerm = piQuery.getFilter().addOrTerm();
 	        for (String processId : processIds) {
