@@ -26,6 +26,8 @@ import com.itextpdf.text.pdf.PdfWriter;
 import com.psl.beans.ApplicationConstants;
 import com.psl.applications.IppService;
 
+
+
 public class DocumentRepositoryServices {
 
 	@Autowired
@@ -87,13 +89,6 @@ public class DocumentRepositoryServices {
 						byte[] convertedContent = ippService.convertMultiStripTifToPDF(originalFileContent);
 						documentDetails.put(fileName, convertedContent);
 
-						String saveLocation = "\\\\ngd024972\\Deployment service my jar\\models\\Shared Location\\test-"
-								+ fileName + ".pdf";
-						LOG.info("Save Location = " + saveLocation);
-						FileOutputStream fos = new FileOutputStream(new File(saveLocation));
-						fos.write(convertedContent);
-						fos.flush();
-						fos.close();
 					} else {
 						throw new RuntimeException(
 								"Invalid document format passed : Splitting and Merging is only supported for PDF and TIFF formats");
