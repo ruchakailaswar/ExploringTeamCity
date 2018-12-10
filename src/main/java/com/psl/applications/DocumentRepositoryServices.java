@@ -3,8 +3,12 @@ package com.psl.applications;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.*;
+
+import javax.xml.bind.DatatypeConverter;
+
 import java.io.*;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.httpclient.HttpStatus;
 import org.eclipse.stardust.common.log.LogManager;
 import org.eclipse.stardust.common.log.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +18,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Image;
+import com.itextpdf.text.Rectangle;
 import com.itextpdf.text.pdf.PdfContentByte;
 import com.itextpdf.text.pdf.PdfImportedPage;
 import com.itextpdf.text.pdf.PdfReader;
@@ -37,19 +42,19 @@ public class DocumentRepositoryServices {
 	static final Logger LOG = LogManager.getLogger(DocumentRepositoryServices.class);
 
 	/**
-	 * This method will fetch from Centera/Isilon and save the pdf document to
-	 * the given location
+	 * This method will fetch document from Centera/Isilon and save the pdf/tiff
+	 * files.
 	 * 
 	 * @param DmsId
-	 * @param basePath
 	 * @param server
 	 * @return
 	 */
-	public String fetchAndSaveDocumentFromRepository(String DmsId, String basePath, String server) {
-		String saveLocation = basePath.trim();
+	public Map<String, byte[]> fetchAndSaveDocumentFromRepository(String DmsId, String server) {
+
 		String fetchUri = server.trim() + ApplicationConstants.REPOSITORY_FETCH_URL.getValue().trim() + DmsId.trim();
 		LOG.info("The URL for fetching the document : " + fetchUri);
-
+		Map<String, byte[]> documentDetails = new HashMap<String, byte[]>();
+		byte[] originalFileContent = null;
 		URL fetch_url;
 		try {
 			fetch_url = new URL(fetchUri);
@@ -57,8 +62,9 @@ public class DocumentRepositoryServices {
 			connection = (HttpURLConnection) fetch_url.openConnection();
 			connection.setRequestMethod("GET");
 			connection.setRequestProperty("Accept", "application/json");
-			if (connection.getResponseCode() != 200) {
-				throw new RuntimeException("Failed : HTTP Error code : " + connection.getResponseCode());
+			if (connection.getResponseCode() != HttpStatus.SC_OK) {
+				throw new RuntimeException("Failed to Get the docuemnt for DmsId" + DmsId + " with HTTP Error code : "
+						+ connection.getResponseCode() + " and Response Message : " + connection.getResponseMessage());
 			}
 			Scanner sc = new Scanner(fetch_url.openStream());
 			String inline = "";
@@ -75,248 +81,134 @@ public class DocumentRepositoryServices {
 				String fileName = fileNameExtnsn.substring(0, fileNameExtnsn.indexOf("." + extension));
 				JsonElement fileData = jobj.get("fileData");
 				inline = fileData.getAsString();
+				originalFileContent = DatatypeConverter.parseBase64Binary(inline);
+				if (!extension.equalsIgnoreCase("pdf")) {
+					if (extension.equalsIgnoreCase("tif") || extension.equalsIgnoreCase("tiff")) {
+						byte[] convertedContent = ippService.convertMultiStripTifToPDF(originalFileContent);
+						documentDetails.put(fileName, convertedContent);
 
-				if (extension.equalsIgnoreCase("pdf")) {
-					saveLocation = saveLocation + "\\" + DmsId + "-" + fileName + ".pdf";
-					LOG.info("Save Location = " + saveLocation);
-					FileOutputStream fos = new FileOutputStream(new File(saveLocation));
-					fos.write(Base64.decodeBase64(inline));
-					fos.flush();
-					fos.close();
+						String saveLocation = "\\\\ngd024972\\Deployment service my jar\\models\\Shared Location\\test-"
+								+ fileName + ".pdf";
+						LOG.info("Save Location = " + saveLocation);
+						FileOutputStream fos = new FileOutputStream(new File(saveLocation));
+						fos.write(convertedContent);
+						fos.flush();
+						fos.close();
+					} else {
+						throw new RuntimeException(
+								"Invalid document format passed : Splitting and Merging is only supported for PDF and TIFF formats");
+					}
 				} else {
-					String tmpImgLocation = saveLocation + "\\" + DmsId + "-" + fileNameExtnsn;
-					FileOutputStream fos = new FileOutputStream(new File(tmpImgLocation));
-					fos.write(Base64.decodeBase64(inline));
-					fos.flush();
-					fos.close();
-					saveLocation = convertImgToPdf(tmpImgLocation, DmsId, extension);
-					LOG.info("Save Location = " + saveLocation);
+					documentDetails.put(fileName, originalFileContent);
 				}
-
 			} else {
 				LOG.info("Error in Get Document Web Service");
 			}
+
 		} catch (IOException e) {
-			LOG.info("Fetch and Save Document  : Exception convertDocuments -- " + e);
-			LOG.info("Fetch and Save Document  : Exception convertDocuments -- " + e.getStackTrace());
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e);
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getStackTrace());
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getCause());
+		} catch (DocumentException e) {
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e);
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getStackTrace());
 			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getCause());
 		}
-
-		return saveLocation;
+		return documentDetails;
 	}
 
 	/**
-	 * convert images to pdf and store at a temporary location
+	 * Merge and Split PDFs as per the specification for scanning & Indexing
 	 * 
-	 * @param location
-	 * @param dmsId
-	 * @param extension
-	 * @return
-	 */
-	public String convertImgToPdf(String location, String dmsId, String extension) {
-		String pdfLocation = location.substring(0, location.indexOf("." + extension)) + "-" + dmsId + ".pdf";
-		try {
-			if (extension.equalsIgnoreCase("jpg") || extension.equalsIgnoreCase("jpeg")
-					|| extension.equalsIgnoreCase("png") || extension.equalsIgnoreCase("gif")) {
-				com.itextpdf.text.Document document = new com.itextpdf.text.Document();
-				FileOutputStream fos;
-				PdfWriter writer = null;
-				fos = new FileOutputStream(pdfLocation);
-				writer = PdfWriter.getInstance(document, fos);
-				writer.open();
-				document.open();
-				document.add(Image.getInstance((new URL("file:///" + location))));
-				document.close();
-				writer.close();
-				fos.close();
-			} else {
-				if (extension.equalsIgnoreCase("tif") || extension.equalsIgnoreCase("tiff")) {
-					File tiffFile = new File(location);
-					int length = (int) tiffFile.length();
-					byte[] bytes = new byte[length];
-					DataInputStream input = new DataInputStream(new FileInputStream(tiffFile));
-					input.readFully(bytes);
-					byte[] convertedContent = ippService.convertMultiStripTifToPDF(bytes);
-					LOG.info("Save Location = " + pdfLocation);
-					FileOutputStream fos1 = new FileOutputStream(new File(pdfLocation));
-					fos1.write(convertedContent);
-					fos1.close();
-					input.close();
-				}
-
-			}
-			File file = new File(location);
-			if (file.delete()) {
-				LOG.info(location + " is deleted");
-			} else {
-				LOG.info("Couldn't delete file " + location);
-			}
-		} catch (DocumentException e) {
-
-			LOG.info("Convert Img to Pdf  : Exception convertDocuments -- " + e);
-			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e.getStackTrace());
-			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e.getCause());
-
-		} catch (IOException e) {
-			LOG.info("Convert Img to Pdf  : Exception convertDocuments -- " + e);
-			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e.getStackTrace());
-			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e.getCause());
-
-		}
-
-		return pdfLocation;
-	}
-
-	/**
-	 * Matching documents splitting specification as per the assigned
-	 * DocumentType
-	 * 
-	 * @param fileLocation
-	 * @param specificationObject
-	 * @param dmsArr
-	 * @return
-	 */
-	public LinkedHashMap<String, LinkedHashMap<String, String>> formatSplittingSpecification(
-			ArrayList<String> fileLocation, JsonObject specificationObject, String[] dmsArr) {
-		LinkedHashMap<String, LinkedHashMap<String, String>> outerMap = new LinkedHashMap<String, LinkedHashMap<String, String>>();
-		String documentType ="";
-		String pageNumbersList = "";
-		String dmsId ="";
-		String filename = "";
-		String docType = "";
-		String pgNo = "";
-		for (String dmsid : dmsArr) {
-			LinkedHashMap<String, String> internalMap = new LinkedHashMap<String, String>();
-			JsonObject jObj = specificationObject.get(dmsid).getAsJsonObject();
-			Set<Map.Entry<String, JsonElement>> jsonMap = jObj.entrySet();
-			documentType = null;
-			pageNumbersList = null;
-			for (Map.Entry<String, JsonElement> mapEntry : jsonMap) {
-				documentType = mapEntry.getKey().toString();
-				pageNumbersList = mapEntry.getValue().getAsString();
-				internalMap.put(documentType, pageNumbersList);
-			}
-			outerMap.put(dmsid, internalMap);
-		}
-
-		LinkedHashMap<String, LinkedHashMap<String, String>> docTypeMap = new LinkedHashMap<String, LinkedHashMap<String, String>>();
-		for (Map.Entry<String, LinkedHashMap<String, String>> outerEntry : outerMap.entrySet()) {
-			dmsId = outerEntry.getKey();
-			filename = "";
-			for (String fLocation : fileLocation) {
-				if (fLocation.contains(dmsId)) {
-					filename = fLocation;
-					break;
-				}
-			}
-			for (Map.Entry<String, String> innerEntry : outerEntry.getValue().entrySet()) {
-				docType = innerEntry.getKey();
-				pgNo = innerEntry.getValue();
-				if (docTypeMap.containsKey(docType)) {
-					LinkedHashMap<String, String> existingMap = docTypeMap.get(docType);
-					existingMap.put(filename, pgNo);
-					docTypeMap.put(docType, existingMap);
-				} else {
-					LinkedHashMap<String, String> dmsPageNo = new LinkedHashMap<String, String>();
-					dmsPageNo.put(filename, pgNo);
-					docTypeMap.put(docType, dmsPageNo);
-
-				}
-
-			}
-		}
-
-		return docTypeMap;
-	}
-
-	/**
-	 * Merge the Pdf's based on the jsonObject Specification
-	 * 
-	 * @param specificationMap
-	 * @param memberNo
-	 * @param schemeNo
-	 * @param basePath
-	 * @return
-	 */
-	public Map<String, String> mergePdfDocuments(LinkedHashMap<String, LinkedHashMap<String, String>> specificationMap,
-			String memberNo, String schemeNo, String basePath) {
-		Map<String, String> mergedDocuments = new HashMap<String, String>();
-		String docType ="";
-		String fileName = "";
-		String outFile ="";
-		OutputStream outputStream;
-		PdfWriter pdfWriter;
-		String path ="";
-		String pageNumbersList = "";
-		String[] pageNumberArray ;
-		int currentPgNo;
-		PdfImportedPage pdfImportedPage;
-		PdfContentByte contentByte;
-		LOG.info("Document splitting and merging specification : Started" + specificationMap.toString());
-		try {
-			for (Map.Entry<String, LinkedHashMap<String, String>> outerEntry : specificationMap.entrySet()) {
-				docType = outerEntry.getKey();
-				fileName = "";
-				if (schemeNo != "" || schemeNo != null) {
-					fileName = schemeNo;
-				}
-				if (memberNo != "" || memberNo != null) {
-					fileName = fileName + "-" + memberNo;
-				}
-				outFile = basePath + "\\" + fileName + "-" + docType + ".pdf";
-				com.itextpdf.text.Document document = new com.itextpdf.text.Document();
-				outputStream = new FileOutputStream(outFile);
-				pdfWriter = PdfWriter.getInstance(document, outputStream);
-				document.open();
-				contentByte = pdfWriter.getDirectContent();
-				for (Map.Entry<String, String> innerEntry : outerEntry.getValue().entrySet()) {
-					path = innerEntry.getKey();
-					pageNumbersList = innerEntry.getValue();
-					pageNumberArray = pageNumbersList.split(",");
-					PdfReader reader = new PdfReader(path);
-					for (String number : pageNumberArray) {
-						document.newPage();
-						currentPgNo = Integer.parseInt(number);
-						pdfImportedPage = pdfWriter.getImportedPage(reader, currentPgNo);
-						contentByte.addTemplate(pdfImportedPage, 0, 0);
-					}
-					pdfWriter.freeReader(reader);
-				}
-				mergedDocuments.put(docType, outFile);
-				outputStream.flush();
-				document.close();
-				outputStream.close();
-				pdfWriter.close();
-				LOG.info("Document Type " + docType + " created");
-
-			}
-			LOG.info(mergedDocuments.toString());
-
-		} catch (IOException e) {
-			LOG.info("Merging Docuemnts  : Exception MergeDocuments -- " + e);
-			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getStackTrace());
-			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getCause());
-
-		} catch (DocumentException e) {
-			LOG.info("Merging Docuemnts  : Exception MergeDocuments -- " + e);
-			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getStackTrace());
-			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getCause());
-
-		}
-
-		return mergedDocuments;
-	}
-
-	/**
-	 * Upload the documents to the Document Repository and return the DmsIDs
-	 * 
-	 * @param documentMap
+	 * @param documentDetails
 	 * @param jsonObject
 	 * @param server
 	 * @return
 	 */
-	public JsonObject uploadDocumentToRepository(Map<String, String> documentMap, JsonObject jsonObject,
+	public Map<String, String> mergePdfDocuments(Map<String, byte[]> documentDetails, JsonObject jsonObject,
 			String server) {
+		Map<String, String> uploadedDocumentDetails = new HashMap<String, String>();
+		JsonObject specificationObject = jsonObject.get("documentSplitter").getAsJsonObject();
+		Set<Map.Entry<String, JsonElement>> jsonMap = specificationObject.entrySet();
+		String documentType = "";
+		String pageNumbersList = "";
+		String filename = "";
+		byte[] fileContent = null;
+		PdfReader reader;
+		PdfWriter pdfWriter = null;
+		ByteArrayOutputStream outputStream = null;
+		PdfImportedPage pdfImportedPage;
+		PdfContentByte contentByte;
+		String[] pageNumberArray;
+		Rectangle rectangle;
+		int currentPgNo;
+		String dmsId = "";
+		InputStream inputStream = null;
+		try {
+			for (Map.Entry<String, byte[]> documentEntry : documentDetails.entrySet()) {
+				filename = documentEntry.getKey();
+				LOG.info("fileName from map :" + filename);
+				fileContent = documentEntry.getValue();
+				inputStream = new ByteArrayInputStream(fileContent);
+				LOG.info("InputStream count :" + inputStream.available());
+				reader = new PdfReader(inputStream);
+
+				for (Map.Entry<String, JsonElement> mapEntry : jsonMap) {
+					documentType = mapEntry.getKey().toString();
+					pageNumbersList = mapEntry.getValue().getAsString();
+					pageNumberArray = pageNumbersList.split(",");
+					com.itextpdf.text.Document document = new com.itextpdf.text.Document();
+					outputStream = new ByteArrayOutputStream();
+					pdfWriter = PdfWriter.getInstance(document, outputStream);
+					document.open();
+					contentByte = pdfWriter.getDirectContent();
+					for (String number : pageNumberArray) {
+						currentPgNo = Integer.parseInt(number);
+						rectangle = reader.getPageSize(currentPgNo);
+						LOG.info("rectangle size : " + rectangle.toString());
+						document.setPageSize(rectangle);
+						document.newPage();
+						pdfImportedPage = pdfWriter.getImportedPage(reader, currentPgNo);
+						contentByte.addTemplate(pdfImportedPage, 0, 0);
+					}
+					document.close();
+					LOG.info("OutputStream : " + outputStream.toByteArray().length);
+					dmsId = uploadDocumentToRepository(outputStream.toByteArray(), filename, documentType, server,
+							jsonObject);
+					uploadedDocumentDetails.put(documentType, dmsId);
+					outputStream.flush();
+				}
+				outputStream.close();
+				pdfWriter.close();
+			}
+		} catch (IOException e) {
+			LOG.info("Merging Docuemnts  : Exception MergeDocuments -- " + e);
+			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getStackTrace());
+			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getCause());
+
+		} catch (DocumentException e) {
+			LOG.info("Merging Docuemnts  : Exception MergeDocuments -- " + e);
+			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getStackTrace());
+			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getCause());
+
+		}
+		LOG.info("The Uploaded Details are : " + uploadedDocumentDetails);
+		return uploadedDocumentDetails;
+	}
+
+	/**
+	 * Upload the documents to the Repository with the keywords
+	 * 
+	 * @param fileContent
+	 * @param fileName
+	 * @param docType
+	 * @param server
+	 * @param jsonObject
+	 * @return
+	 */
+	public String uploadDocumentToRepository(byte[] fileContent, String fileName, String docType, String server,
+			JsonObject jsonObject) {
+		String dmsId = "";
 		JsonObject response = new JsonObject();
 		JsonObject body = new JsonObject();
 		JsonObject innerBody = new JsonObject();
@@ -324,73 +216,95 @@ public class DocumentRepositoryServices {
 		String schemeNo = "";
 		String workType = "";
 		Long processOid = 0L;
-		String currentFile = "";
-		String currentDocType = "";
+		String uploadedDate = "";
+		String memberFirst = "";
+		String memberLast = "";
+		String schemeName = "";
+		String comments = "";
+		BufferedReader br = null;
+
+		String fileDataString = DatatypeConverter.printBase64Binary(fileContent);
 		String uploadUri = server.trim() + ApplicationConstants.REPOSITORY_UPLOAD_URL.getValue().trim();
 		LOG.info("The URL for uploading the document : " + uploadUri);
+		String completeFileName = fileName + "-" + docType + ".pdf";
 
 		try {
 			URL uploadUrl = new URL(uploadUri);
 			HttpURLConnection addConnection;
-			Date date = new Date();
 			String system = server.split("/")[2].trim().split(":")[0];
-			for (Map.Entry<String, String> mapEntry : documentMap.entrySet()) {
-				addConnection = (HttpURLConnection) uploadUrl.openConnection();
-				addConnection.setRequestMethod("POST");
-				addConnection.setRequestProperty("Content-Type", "application/json");
-				addConnection.setDoOutput(true);
-				currentFile = mapEntry.getValue();
-				currentDocType = mapEntry.getKey();
-				body.addProperty("createdBy", "PSL Scanning & Indexing");
-				body.addProperty("system", system);
-				body.addProperty("file", currentFile);
-				body.add("keywords", null);
+			addConnection = (HttpURLConnection) uploadUrl.openConnection();
+			addConnection.setRequestMethod("POST");
+			addConnection.setRequestProperty("Content-Type", "application/json");
+			addConnection.setDoOutput(true);
+			body.addProperty("createdBy", "PSL Scanning & Indexing");
+			body.addProperty("system", system);
+			body.addProperty("fileData", fileDataString);
+			body.addProperty("file", completeFileName);
+			body.add("keywords", null);
 
-				innerBody.addProperty("documentType", currentDocType);
+			innerBody.addProperty("documentType", docType);
 
-				innerBody.addProperty("uploadedDate", date.toString());
-				if (jsonObject.get("memberNo") != null) {
-					memberNo = jsonObject.get("memberNo").getAsString();
-					innerBody.addProperty("memberNo", memberNo);
-				}
-				if (jsonObject.get("schemeNo") != null) {
-					schemeNo = jsonObject.get("schemeNo").getAsString();
-					innerBody.addProperty("schemeNo", schemeNo);
-				}
-				if (jsonObject.get("workType") != null) {
-					workType = jsonObject.get("workType").getAsString();
-					innerBody.addProperty("workType", workType);
-				}
-				if (jsonObject.get("processOID") != null) {
-					processOid = jsonObject.get("processOID").getAsLong();
-					innerBody.addProperty("processOID", processOid);
-				}
+			if (jsonObject.get("uploadedDate") != null) {
+				uploadedDate = jsonObject.get("uploadedDate").getAsString();
+				innerBody.addProperty("uploadedDate", uploadedDate);
+			}
+			if (jsonObject.get("memberFirstName") != null) {
+				memberFirst = jsonObject.get("memberFirstName").getAsString();
+				innerBody.addProperty("memberFirstName", memberFirst);
+			}
+			if (jsonObject.get("memberLastName") != null) {
+				memberLast = jsonObject.get("memberLastName").getAsString();
+				innerBody.addProperty("memberLastName", memberLast);
+			}
+			if (jsonObject.get("memberNo") != null) {
+				memberNo = jsonObject.get("memberNo").getAsString();
+				innerBody.addProperty("memberNo", memberNo);
+			}
+			if (jsonObject.get("schemeName") != null) {
+				schemeName = jsonObject.get("schemeName").getAsString();
+				innerBody.addProperty("schemeName", schemeName);
+			}
+			if (jsonObject.get("schemeNo") != null) {
+				schemeNo = jsonObject.get("schemeNo").getAsString();
+				innerBody.addProperty("schemeNo", schemeNo);
+			}
+			if (jsonObject.get("workType") != null) {
+				workType = jsonObject.get("workType").getAsString();
+				innerBody.addProperty("workType", workType);
+			}
+			if (jsonObject.get("processOID") != null) {
+				processOid = jsonObject.get("processOID").getAsLong();
+				innerBody.addProperty("processOID", processOid);
+			}
+			if (jsonObject.get("comments") != null) {
+				comments = jsonObject.get("comments").getAsString();
+				innerBody.addProperty("comments", comments);
+			}
 
-				
-				body.add("keywords2", innerBody);
+			body.add("keywords2", innerBody);
 
-				String input = body.toString();
-				OutputStream os = addConnection.getOutputStream();
-				os.write(input.getBytes());
-				os.flush();
+			String input = body.toString();
+			LOG.info("upload file json : " + input);
+			OutputStream os = addConnection.getOutputStream();
+			os.write(input.getBytes());
+			os.flush();
 
-				if (addConnection.getResponseCode() != 200) {
-					throw new RuntimeException("Failed to Upload Document " + currentFile
-							+ " to Repository with HTTP error code : " + addConnection.getResponseCode()
-							+ " and reponse message : " + addConnection.getResponseMessage());
-				}
+			if (addConnection.getResponseCode() != HttpStatus.SC_OK) {
+				throw new RuntimeException("Failed to Upload Document " + completeFileName
+						+ " to Repository with HTTP error code : " + addConnection.getResponseCode()
+						+ " and reponse message : " + addConnection.getResponseMessage());
+			}
 
-				BufferedReader br = new BufferedReader(new InputStreamReader((addConnection.getInputStream())));
-				String output;
-				LOG.info("Output from Server .... \n");
-				while ((output = br.readLine()) != null) {
-					LOG.info(output);
-					if (output.matches("[0-9]+")) {
-						response.addProperty(currentDocType, output);
-					}
+			jsonObject = null;
+			br = new BufferedReader(new InputStreamReader((addConnection.getInputStream())));
+			dmsId = "";
+			LOG.info("Output from Server .... \n");
+			while ((dmsId = br.readLine()) != null) {
+				LOG.info(dmsId);
+				if (dmsId.matches("[0-9]+")) {
+					break;
 				}
 			}
-			jsonObject = null;
 		} catch (IOException e) {
 			LOG.info("Uploading Docuemnts  : Exception UploadDocuments -- " + e);
 			LOG.info("Uploading Docuemnts : Exception UploadDocuments -- " + e.getStackTrace());
@@ -398,6 +312,7 @@ public class DocumentRepositoryServices {
 
 		}
 
-		return response;
+		return dmsId;
 	}
+
 }

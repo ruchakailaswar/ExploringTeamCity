@@ -660,9 +660,10 @@ public class DocumentServices {
 				}
 				// Looping the document ID's from counter till batch size read
 				// from properties file
+				int checkpointLimit;
 				for (int i = counter; i < counterLimit;) {
 
-					int checkpointLimit = checkpoint;
+					checkpointLimit = checkpoint;
 					if (counterLimit < (checkpointLimit + i)) {
 						checkpointLimit = counterLimit - i;
 					}
@@ -883,8 +884,8 @@ public class DocumentServices {
 	}
 
 	/**
-	 * This method will download, split, merge and upload the splitted centera
-	 * pdf documents
+	 * This method will download, split, merge and upload the splitted documents
+	 * to centera as PDF documents
 	 * 
 	 * @param input
 	 * @return
@@ -894,20 +895,14 @@ public class DocumentServices {
 	@Produces(MediaType.APPLICATION_JSON)
 	@Consumes(MediaType.APPLICATION_JSON)
 	public Response splitAndMergePdfDocument(String input) {
-		LOG.info("Splitting and Merging documents : Started");
-		JsonObject response = null;
+		LOG.info("Splitting and Merging documents : Started " + input);
 		JsonObject jsonObject = ippService.parseJSONObject(input);
 		JsonObject documentSplitterObject = null;
 		String dmsIdString = "";
-		String basePath = "";
 		String server = "";
-		String[] dmsArr;
-		String memberNo = "";
-		String schemeNo = "";
-		String fileLocation = "";
+		JsonObject response = new JsonObject();
 		if (jsonObject.get("dmsIDs") != null) {
 			dmsIdString = jsonObject.get("dmsIDs").getAsString();
-			dmsArr = dmsIdString.split(",");
 			jsonObject.remove("dmsIDs");
 		} else {
 			return Response.status(400).entity("{\"response\":\"'dmsIDs' parameter missing in request body.\"}")
@@ -921,55 +916,27 @@ public class DocumentServices {
 			return Response.status(400).entity("{\"response\":\"'server' parameter missing in request body.\"}")
 					.build();
 		}
-
-		if (jsonObject.get("path") != null) {
-			basePath = jsonObject.get("path").getAsString();
-			jsonObject.remove("path");
-		} else {
-			return Response.status(400).entity("{\"response\":\"'path' parameter missing in request body.\"}").build();
-		}
-
 		if (jsonObject.get("documentSplitter") != null) {
 			documentSplitterObject = jsonObject.get("documentSplitter").getAsJsonObject();
-			jsonObject.remove("documentSplitter");
+			// jsonObject.remove("documentSplitter");
 		} else {
 			return Response.status(400)
 					.entity("{\"response\":\"'documentSplitter' parameter missing in request body.\"}").build();
 		}
+		try {
+			Map<String, byte[]> fileDetails = documentRepositoryServices.fetchAndSaveDocumentFromRepository(dmsIdString,
+					server);
+			Map<String, String> uploadDetails = documentRepositoryServices.mergePdfDocuments(fileDetails, jsonObject,
+					server);
 
-		if (jsonObject.get("memberNo") != null) {
-			memberNo = jsonObject.get("memberNo").getAsString();
-		}
-		if (jsonObject.get("schemeNo") != null) {
-			schemeNo = jsonObject.get("schemeNo").getAsString();
-		}
-
-		List<String> deleteFileLocations = new ArrayList<String>();
-		ArrayList<String> OriginalFileLocation = new ArrayList<String>();
-		for (int i = 0; i < dmsArr.length; i++) {
-			fileLocation = documentRepositoryServices.fetchAndSaveDocumentFromRepository(dmsArr[i], basePath, server);
-			OriginalFileLocation.add(fileLocation);
-			deleteFileLocations.add(fileLocation);
-		}
-
-		LinkedHashMap<String, LinkedHashMap<String, String>> specificationMap = documentRepositoryServices
-				.formatSplittingSpecification(OriginalFileLocation, documentSplitterObject, dmsArr);
-
-		Map<String, String> mergedDocuments = new HashMap<String, String>();
-		mergedDocuments = documentRepositoryServices.mergePdfDocuments(specificationMap, memberNo, schemeNo, basePath);
-		deleteFileLocations.addAll(mergedDocuments.values());
-
-		response = documentRepositoryServices.uploadDocumentToRepository(mergedDocuments, jsonObject, server);
-
-		for (String documentLocation : deleteFileLocations) {
-			File file = new File(documentLocation);
-			if (file.delete()) {
-				LOG.info(documentLocation + " is deleted");
-			} else {
-				LOG.info("Couldn't delete file " + documentLocation);
+			for (Map.Entry<String, String> detailsEntry : uploadDetails.entrySet()) {
+				response.addProperty(detailsEntry.getKey(), detailsEntry.getValue());
 			}
+		} catch (Exception e) {
+			LOG.info("Split and Merge Document : Exception -- " + e);
+			LOG.info("Split and Merge Document : Exception -- " + e.getStackTrace());
+			LOG.info("Split and Merge Document : Exception -- " + e.getCause());
 		}
-
 		if (response != null) {
 			return Response.ok(response.toString(), MediaType.APPLICATION_JSON_TYPE)
 					.header("Access-Control-Allow-Origin", "*").build();
@@ -977,4 +944,5 @@ public class DocumentServices {
 			return Response.serverError().build();
 		}
 	}
+	
 }
