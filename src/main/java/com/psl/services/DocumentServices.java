@@ -25,7 +25,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.psl.applications.DocumentRepositoryServices;
 import com.psl.applications.IppService;
 import com.psl.beans.ApplicationConstants;
 
@@ -44,8 +43,6 @@ public class DocumentServices {
 		this.ippService = ippService;
 	}
 
-	@Autowired
-	DocumentRepositoryServices documentRepositoryServices;
 
 	private static final Logger LOG = LogManager.getLogger(DocumentServices.class);
 
