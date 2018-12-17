@@ -2,6 +2,7 @@ package com.psl.applications;
 
 import com.psl.beans.ApplicationConstants;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -65,6 +66,7 @@ public class SchemeDocuments {
 		List<Document> docsList = null;
 		Properties prop = null;
 		InputStream is = null;
+		String eligibleForSchemeDocs = null;
 		List<Document> processAttachments = null;
 		WorkflowService ws = null;
 		if (ippService == null) {
@@ -83,7 +85,6 @@ public class SchemeDocuments {
 				prop = new Properties();
 				prop.load(is);
 				String[] worktypesArr = prop.getProperty("workTypes").split(",");
-
 				List<String> worktypesList = Arrays.asList(worktypesArr);
 				if (worktypesList.contains(workType)) {
 					String docTypes = prop.getProperty("docType");
@@ -108,7 +109,6 @@ public class SchemeDocuments {
 						if ((pis != null) && (pis.size() > 0)) {
 							for (ProcessInstance pi : pis) {
 								LOG.warn("Selected OID :: " + pi.getOID());
-								docsList = new ArrayList();
 								processAttachments = null;
 								try {
 									Object processData = ws.getInDataPath(pi.getOID(),
@@ -118,31 +118,15 @@ public class SchemeDocuments {
 										LOG.warn(
 												"AttachSchemeDocumentToCurrentProcess : Number of attachments for processOID "
 														+ pi.getOID() + " are " + processAttachments.size());
-										for (Document processAttachment : processAttachments) {
-											LOG.warn(
-													"AttachSchemeDocumentToCurrentProcess : Document Detail -- , Doc Id : "
-															+ processAttachment.getId() + ", Name "
-															+ processAttachment.getName() + ", Date Created "
-															+ processAttachment.getDateCreated() + ", Type : "
-															+ processAttachment.getDocumentType());
-											if (processAttachment.getProperty(
-													ApplicationConstants.META_DATA_DOCUMENT_TYPES.getValue()) == null) {
-												LOG.warn(processAttachment.getProperties() + "-----------"
-														+ processAttachment.getProperty(
-																ApplicationConstants.META_DATA_DOCUMENT_TYPES
-																		.getValue()));
-
-												processAttachment.setProperty(
-														ApplicationConstants.META_DATA_DOCUMENT_TYPES.getValue(),
-														"New Business");
-
-												LOG.warn(processAttachment.getProperties() + "-----------"
-														+ processAttachment.getProperty(
-																ApplicationConstants.META_DATA_DOCUMENT_TYPES
-																		.getValue()));
-											}
-											docsList.add(processAttachment);
-										}
+										docsList = getDocumentList(processAttachments);
+										createDocumentList(targetProcessOID, docsList, ws);
+										ws.setOutDataPath(targetProcessOID,
+												ApplicationConstants.PROCESS_ATTACHMENTS.getValue(), docsList);
+										LOG.warn(
+												"AttachSchemeDocumentToCurrentProcess : the document/s attached to the process are :: "
+														+ docsList);
+										responseStatus = "\"Success\"";
+										return "{\"response\":" + responseStatus + "}";
 									} else {
 										LOG.warn(
 												"AttachSchemeDocumentToCurrentProcess : No attachments available for processOID "
@@ -157,34 +141,6 @@ public class SchemeDocuments {
 											+ ApplicationConstants.PROCESS_ATTACHMENTS.getValue()
 											+ " on scope process Instance " + pi.getOID());
 								}
-								if ((docsList != null) && (docsList.size() > 0)) {
-									break;
-								}
-								LOG.warn(
-										"AttachSchemeDocumentToCurrentProcess : the document/s attached to the process are :: "
-												+ docsList);
-							}
-							if ((docsList != null) && (docsList.size() > 0)) {
-								LOG.warn(
-										"AttachSchemeDocumentToCurrentProcess : Adding the existing attachments to the temp doc list ");
-								Object processData = ws.getInDataPath(targetProcessOID,
-										ApplicationConstants.PROCESS_ATTACHMENTS.getValue());
-								LOG.warn(
-										"AttachSchemeDocumentToCurrentProcess : Adding the existing attachments to the temp doc list "
-												+ processData);
-								processAttachments = null;
-								processAttachments = (List<Document>) processData;
-								LOG.warn("AttachSchemeDocumentToCurrentProcess :Existing Documents"
-										+ processAttachments);
-								if (processAttachments != null) {
-									LOG.warn(
-											"AttachSchemeDocumentToCurrentProcess : Adding the existing attachments to the temp doc list ");
-									docsList.addAll(processAttachments);
-								}
-								ws.setOutDataPath(targetProcessOID, ApplicationConstants.PROCESS_ATTACHMENTS.getValue(),
-										docsList);
-								responseStatus = "\"Success\"";
-								return "{\"response\":" + responseStatus + "}";
 							}
 							LOG.warn(
 									"AttachSchemeDocumentToCurrentProcess : No instance with attached document found for provided input");
@@ -197,10 +153,11 @@ public class SchemeDocuments {
 							: "AttachSchemeDocumentToCurrentProcess : " + processId == null ? "processId"
 									: "targetProcessOID Not Found");
 					return "{\"response\":" + responseStatus + "}";
+				} else {
+					LOG.warn("AttachSchemeDocumentToCurrentProcess : Not supported for current work type");
+					responseStatus = "Not supported for current work type";
+					return "{\"response\":" + responseStatus + "}";
 				}
-				LOG.warn("AttachSchemeDocumentToCurrentProcess : Not supported for current work type");
-				responseStatus = "\"Success\"";
-				return "{\"response\":" + responseStatus + "}";
 			}
 			LOG.warn("AttachSchemeDocumentToCurrentProcess : Inputstream Object for reading properties file is null");
 			return "{\"response\":" + responseStatus + "}";
@@ -208,40 +165,98 @@ public class SchemeDocuments {
 			LOG.warn(
 					"AttachSchemeDocumentToCurrentProcess : Could not find Data Path PROCESS_ATTACHMENTS on scope process Instance "
 							+ targetProcessOID);
-			e.printStackTrace();
+			LOG.warn("AttachSchemeDocumentToCurrentProcess : " + e.getStackTrace());
 			return "{\"response\":" + responseStatus + "}";
 
 		} catch (InvalidValueException e) {
 			LOG.warn(
 					"AttachSchemeDocumentToCurrentProcess : Could not set data for Data Path PROCESS_ATTACHMENTS on scope process Instance "
 							+ targetProcessOID);
-			e.printStackTrace();
+			LOG.warn("AttachSchemeDocumentToCurrentProcess : " + e.getStackTrace());
 			return "{\"response\":" + responseStatus + "}";
 		} catch (DocumentManagementServiceException e) {
 			LOG.warn(
 					"AttachSchemeDocumentToCurrentProcess : Could not set data for Data Path PROCESS_ATTACHMENTS on scope process Instance "
 							+ targetProcessOID);
-			e.printStackTrace();
+			LOG.warn("AttachSchemeDocumentToCurrentProcess : " + e.getStackTrace());
 			return "{\"response\":" + responseStatus + "}";
 		} catch (BadRequestException e) {
 			LOG.warn("AttachSchemeDocumentToCurrentProcess : Please check input parameters processId : " + processId
 					+ ", schemeNo : " + schemeNo + ", targetProcessOID : " + targetProcessOID + e.getStackTrace());
-			e.printStackTrace();
+			LOG.warn("AttachSchemeDocumentToCurrentProcess : " + e.getStackTrace());
 			return "{\"response\":" + responseStatus + "}";
 		} catch (FileNotFoundException e) {
 			LOG.warn(
 					"AttachSchemeDocumentToCurrentProcess : Unable to locate property file 'Producttype-processid-map.properties' in classpath"
 							+ e.getStackTrace());
-			e.printStackTrace();
+			LOG.warn("AttachSchemeDocumentToCurrentProcess : " + e.getStackTrace());
 			return "{\"response\":" + responseStatus + "}";
 		} catch (Exception e) {
 			LOG.warn(
 					"AttachSchemeDocumentToCurrentProcess : Exception inside getProcessInstanceByProcessIdAndSchemeNo  REST API : Getting Process instance !"
 							+ e.getStackTrace());
-			e.printStackTrace();
+			LOG.warn("AttachSchemeDocumentToCurrentProcess : " + e.getStackTrace());
 			response = "{\"response\":" + responseStatus + "}";
 		}
 		return response;
+	}
+
+	public String shouldDocumentsBeAttached(String workType) {
+		Properties prop = null;
+		InputStream is = null;
+		String isEligibleForWorktye = "";
+		is = getClass().getClassLoader().getResourceAsStream("producttype-processid-map.properties");
+		if (is != null) {
+			prop = new Properties();
+			try {
+				prop.load(is);
+				String[] worktypesArr = prop.getProperty("workTypes").split(",");
+				List<String> worktypesList = Arrays.asList(worktypesArr);
+				if (!worktypesList.contains(workType)) {
+					isEligibleForWorktye = "-1";
+				} else {
+					isEligibleForWorktye = "0";
+				}
+			} catch (IOException e) {
+				LOG.warn("AttachSchemeDocumentToCurrentProcess : " + e.getStackTrace());
+			}
+
+		}
+		return isEligibleForWorktye;
+	}
+
+	private void createDocumentList(Long targetProcessOID, List<Document> docsList, WorkflowService ws) {
+		List<Document> processAttachments = null;
+		LOG.warn("AttachSchemeDocumentToCurrentProcess : Adding the existing attachments to the temp doc list ");
+		Object processData = ws.getInDataPath(targetProcessOID, ApplicationConstants.PROCESS_ATTACHMENTS.getValue());
+		LOG.warn("AttachSchemeDocumentToCurrentProcess : Adding the existing attachments to the temp doc list "
+				+ processData);
+		processAttachments = (List<Document>) processData;
+		LOG.warn("AttachSchemeDocumentToCurrentProcess :Existing Documents" + processAttachments);
+		if (processAttachments != null) {
+			LOG.warn("AttachSchemeDocumentToCurrentProcess : Adding the existing attachments to the temp doc list ");
+			docsList.addAll(processAttachments);
+		}
+	}
+
+	private List<Document> getDocumentList(List<Document> processAttachments) {
+		List<Document> docsList = new ArrayList<Document>();
+		for (Document processAttachment : processAttachments) {
+			LOG.warn("AttachSchemeDocumentToCurrentProcess : Document Detail -- , Doc Id : " + processAttachment.getId()
+					+ ", Name " + processAttachment.getName() + ", Date Created " + processAttachment.getDateCreated()
+					+ ", Type : " + processAttachment.getDocumentType());
+			if (processAttachment.getProperty(ApplicationConstants.META_DATA_DOCUMENT_TYPES.getValue()) == null) {
+				LOG.warn(processAttachment.getProperties() + "-----------"
+						+ processAttachment.getProperty(ApplicationConstants.META_DATA_DOCUMENT_TYPES.getValue()));
+
+				processAttachment.setProperty(ApplicationConstants.META_DATA_DOCUMENT_TYPES.getValue(), "New Business");
+
+				LOG.warn(processAttachment.getProperties() + "-----------"
+						+ processAttachment.getProperty(ApplicationConstants.META_DATA_DOCUMENT_TYPES.getValue()));
+			}
+			docsList.add(processAttachment);
+		}
+		return docsList;
 	}
 
 	private ProcessInstances fetchProcessInstances(String productType, String schemeNo, String processId,

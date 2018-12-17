@@ -890,6 +890,7 @@ public class DocumentServices {
 	 * @param input
 	 * @return
 	 */
+
 	@POST
 	@Path("splitAndMerge")
 	@Produces(MediaType.APPLICATION_JSON)
@@ -897,44 +898,28 @@ public class DocumentServices {
 	public Response splitAndMergePdfDocument(String input) {
 		LOG.info("Splitting and Merging documents : Started " + input);
 		JsonObject jsonObject = ippService.parseJSONObject(input);
-		JsonObject documentSplitterObject = null;
-		String dmsIdString = "";
-		String server = "";
+		JsonArray documentSplitterArray = null;
 		JsonObject response = new JsonObject();
-		if (jsonObject.get("dmsIDs") != null) {
-			dmsIdString = jsonObject.get("dmsIDs").getAsString();
-			jsonObject.remove("dmsIDs");
-		} else {
-			return Response.status(400).entity("{\"response\":\"'dmsIDs' parameter missing in request body.\"}")
-					.build();
-		}
-
-		if (jsonObject.get("server") != null) {
-			server = jsonObject.get("server").getAsString();
-			jsonObject.remove("server");
-		} else {
-			return Response.status(400).entity("{\"response\":\"'server' parameter missing in request body.\"}")
-					.build();
-		}
+	
 		if (jsonObject.get("documentSplitter") != null) {
-			documentSplitterObject = jsonObject.get("documentSplitter").getAsJsonObject();
-			// jsonObject.remove("documentSplitter");
+			documentSplitterArray = jsonObject.get("documentSplitter").getAsJsonArray();
+			jsonObject.remove("documentSplitter");
 		} else {
 			return Response.status(400)
 					.entity("{\"response\":\"'documentSplitter' parameter missing in request body.\"}").build();
 		}
 		try {
-			Map<String, byte[]> fileDetails = documentRepositoryServices.fetchAndSaveDocumentFromRepository(dmsIdString,
-					server);
-			Map<String, String> uploadDetails = documentRepositoryServices.mergePdfDocuments(fileDetails, jsonObject,
-					server);
-
+			LinkedHashMap<String,LinkedHashMap<byte[],int[]>> formattedSpecificationMap = ippService.populateDataForSplitMerge(documentSplitterArray);
+			
+			LinkedHashMap<String,String> uploadDetails = ippService.mergePdfDocuments(formattedSpecificationMap,jsonObject);
+			LOG.info(uploadDetails.toString());
 			for (Map.Entry<String, String> detailsEntry : uploadDetails.entrySet()) {
 				response.addProperty(detailsEntry.getKey(), detailsEntry.getValue());
 			}
+
 		} catch (Exception e) {
 			LOG.info("Split and Merge Document : Exception -- " + e);
-			LOG.info("Split and Merge Document : Exception -- " + e.getStackTrace());
+			LOG.info("Split and Merge Document : Exception -- " + e.getStackTrace().toString());
 			LOG.info("Split and Merge Document : Exception -- " + e.getCause());
 		}
 		if (response != null) {

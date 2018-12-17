@@ -5,12 +5,15 @@ import static org.eclipse.stardust.engine.core.spi.dms.RepositoryIdUtils.stripRe
 import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
 import java.io.*;
+import java.net.URLConnection;
 import java.util.*;
 
 import javax.media.jai.RenderedImageAdapter;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.io.IOUtils;
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -29,7 +32,11 @@ import org.eclipse.stardust.engine.core.runtime.beans.AbortScope;
 import com.google.gson.*;
 import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Image;
+import com.itextpdf.text.PageSize;
 import com.itextpdf.text.Rectangle;
+import com.itextpdf.text.pdf.PdfContentByte;
+import com.itextpdf.text.pdf.PdfImportedPage;
+import com.itextpdf.text.pdf.PdfReader;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.itextpdf.text.pdf.RandomAccessFileOrArray;
 import com.itextpdf.text.pdf.codec.TiffImage;
@@ -99,17 +106,16 @@ public class IppService {
 	
 	
 	public String[] getActivityIds() {
-		return activityIds;
+        return activityIds;
     }
 
     public void setActivityIds(String[] activityIds) {
-    
         this.activityIds = activityIds;
         this.actIds = new HashSet<String>(Arrays.asList(activityIds));
     }
     
     public String[] getProcessIds() {
-       return processIds;
+        return processIds;
     }
 
     public void setProcessIds(String[] processIds) {
@@ -722,9 +728,7 @@ public class IppService {
 			} else{
 				piQuery = ProcessInstanceQuery.findAlive();
 			} 
-			
 			String[] processIds = {"{L1GenericModel}L1GenericProcess","{NewBusinessModel}VettingAndInstallationProcess","{NewBusinessModel}FSBRegistrationProcess","{NewBusinessModel}RatificationCommonSubProcess","{NewBusinessModel}SpecialRulesGenerationProcess","{AMLModel}AMLProcess","{ConfigurableReminder}ReminderProcess","{DynamicModel}DynamicProcess"};
-			
 			FilterOrTerm processIdOrTerm = piQuery.getFilter().addOrTerm();
 	        for (String processId : processIds) {
 	            processIdOrTerm.add(new ProcessDefinitionFilter(processId, false));
@@ -2050,6 +2054,309 @@ public class IppService {
 		}
 		return result;
 	}
+	
+	/**
+	 * Populate data for split and merge of documents for new Scanning n Indexing
+	 * 
+	 * @param documentSplitterArray
+	 * @return
+	 */
+	public LinkedHashMap<String,LinkedHashMap<byte[],int[]>> populateDataForSplitMerge(JsonArray documentSplitterArray){
+		LinkedHashMap<String,LinkedHashMap<byte[],int[]>> formattedSpecificationMap = new LinkedHashMap<String,LinkedHashMap<byte[],int[]>>();
+		LinkedHashMap<byte[],LinkedHashMap<String,int[]>> specificationMap = new LinkedHashMap<byte[],LinkedHashMap<String,int[]>>();
+		LinkedHashMap<String,int[]> innerSpecification;
+		JsonArray documentSplitterInnerArray = null;
+		JsonArray documentPageNumberArray = null;
+		String jcrIdString = "";
+		JsonObject splitterOuterObject;
+		JsonObject splitterInnerObject;
+		String docType ="";
+		int[] pgNo ;
+		byte[] fileData =null;
+		Document currentDocument;
+		String documentNameExtn;
+		String documentName;
+		String extension;
+		String[] fileNameArr;
+		int nameLength ;
+		LOG.info("Populating Data to map for Split and Merge : Started");
+		try{
+			
+		
+		for(int i=0;i<documentSplitterArray.size();i++)
+		{
+			splitterOuterObject = documentSplitterArray.get(i).getAsJsonObject();
+			jcrIdString = splitterOuterObject.get("jcrID").getAsString();
+			fileData = getDocumentManagementService().retrieveDocumentContent(jcrIdString);
+			currentDocument = getDocumentManagementService().getDocument(jcrIdString);
+			documentNameExtn = currentDocument.getName();
+			fileNameArr = documentNameExtn.split("\\.");
+			nameLength = fileNameArr.length;
+			extension = fileNameArr[nameLength - 1];
+			if (!extension.equalsIgnoreCase("pdf")) {
+				if(extension.equalsIgnoreCase("tif") || extension.equalsIgnoreCase("tiff"))
+				{
+					fileData = convertMultiStripTifToPDF(fileData);
+				}
+				else if(extension.equalsIgnoreCase("jpg") || extension.equalsIgnoreCase("jpeg")
+						|| extension.equalsIgnoreCase("png") || extension.equalsIgnoreCase("gif")){
+					fileData = convertImagesToPdf(fileData);
+				}else{
+					throw new RuntimeException(
+							"Invalid document format passed : Splitting and Merging is only supported for PDF, TIFF, JPEG and PNG formats");
+				}
+			}
+			documentSplitterInnerArray = splitterOuterObject.get("docTypes").getAsJsonArray();
+			innerSpecification = new LinkedHashMap<String,int[]>();
+			for(int j=0;j<documentSplitterInnerArray.size();j++)
+			{
+				splitterInnerObject = documentSplitterInnerArray.get(j).getAsJsonObject();
+				docType = splitterInnerObject.get("docType").getAsString();
+				documentPageNumberArray = splitterInnerObject.get("pageNumbers").getAsJsonArray();
+				pgNo = new int[documentPageNumberArray.size()];
+				for(int k=0;k<documentPageNumberArray.size();k++)
+				{
+					pgNo[k] = documentPageNumberArray.get(k).getAsInt();
+				}
+				innerSpecification.put(docType, pgNo);
+			}
+			specificationMap.put(fileData, innerSpecification);
+		}
+		
+		formattedSpecificationMap = formatSplittingSpecification(specificationMap);
+		
+		}
+		catch(DocumentException e){
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e);
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getStackTrace());
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getCause());
+		}
+		catch(IOException e){
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e);
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getStackTrace());
+			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getCause());
+		}
+		return formattedSpecificationMap;
+			
+		}
+	
+	/**
+	 * Convert images (jpeg,png) to PDF for new Scanning n Indexing
+	 * 
+	 * @param originalContent
+	 * @return
+	 */
+	public byte[] convertImagesToPdf(byte[] originalContent){
+		LOG.info("Inside convertImgesToPdf Method -- conversion Started for a document");
+		byte[] convertedContent = null;
+		try {
+			com.itextpdf.text.Document document = new com.itextpdf.text.Document();
+			PdfWriter writer = null;
+			ByteArrayOutputStream bos = new ByteArrayOutputStream();			
+			Image image = Image.getInstance(originalContent);
+			Rectangle A4 = PageSize.A4;
+			float scalePortrait = Math.min(A4.getWidth() / image.getWidth(),A4.getHeight() / image.getHeight());
+			float scaleLandscape = Math.min(A4.getHeight() / image.getWidth(),A4.getWidth() / image.getHeight());
+			boolean isLandscape = scaleLandscape > scalePortrait;
+			float w;
+		    float h;
+		    if (isLandscape) {
+		    	A4 = A4.rotate();
+		        w = image.getWidth() * scaleLandscape;
+		        h = image.getHeight() * scaleLandscape;
+		    } else {
+		        w = image.getWidth() * scalePortrait;
+		        h = image.getHeight() * scalePortrait;
+		    }
+		    writer = PdfWriter.getInstance(document, bos);
+			writer.open();
+			document.open();
+			image.scaleAbsolute(w, h);
+            float posH = (A4.getHeight() - h) / 2;
+            float posW = (A4.getWidth() - w) / 2;
+
+            image.setAbsolutePosition(posW, posH);
+			image.setBorderWidth(0);
+			image.scaleAbsoluteHeight(PageSize.A4.getHeight());
+			image.scaleAbsoluteWidth(PageSize.A4.getWidth());
+			document.add(image);
+			document.close();
+			convertedContent = bos.toByteArray();
+			writer.close();
+			bos.close();
+			
+		} catch (DocumentException e) {
+			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e);
+			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e.getStackTrace());
+			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e.getCause());
+		} catch (IOException e) {
+			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e);
+			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e.getStackTrace());
+			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e.getCause());
+		}
+		return convertedContent;
+	}
+
+	
+	/**
+	 * Format the document specification for splitting for new Scanning n Indexing
+	 * 
+	 * @param originalSpecificationMap
+	 * @return
+	 */
+	public LinkedHashMap<String,LinkedHashMap<byte[],int[]>> formatSplittingSpecification(LinkedHashMap<byte[],LinkedHashMap<String,int[]>> originalSpecificationMap){
+		LinkedHashMap<byte[],int[]> innerMap ;
+		LinkedHashMap<String,LinkedHashMap<byte[],int[]>> formattedSpecificationMap = new LinkedHashMap<String,LinkedHashMap<byte[],int[]>>();
+		byte[] filedata =null;
+		String currentDocType= "";
+		int[] currentPgNoArr = null;
+		
+		for (Map.Entry<byte[], LinkedHashMap<String,int[]>> originalOuterMap : originalSpecificationMap.entrySet()) 
+		{
+			filedata = originalOuterMap.getKey();
+			for(Map.Entry<String, int[]> originalInnerMap : originalOuterMap.getValue().entrySet())
+			{
+				currentDocType = originalInnerMap.getKey();
+				currentPgNoArr = originalInnerMap.getValue();
+				if(formattedSpecificationMap.containsKey(currentDocType))
+				{
+					innerMap = formattedSpecificationMap.get(currentDocType);
+					innerMap.put(filedata, currentPgNoArr);
+					formattedSpecificationMap.put(currentDocType, innerMap);
+				}
+				else
+				{
+					innerMap = new LinkedHashMap<byte[],int[]>();
+					innerMap.put(filedata, currentPgNoArr);
+					formattedSpecificationMap.put(currentDocType, innerMap);
+				}
+			}
+			
+		}
+		return formattedSpecificationMap;
+	}
+	
+	
+	/**
+	 * Merging multiple PDF's to create a single document for a DocType for new Scanning n Indexing
+	 * 
+	 * @param formattedSpecificationMap
+	 * @param jsonObject
+	 * @return
+	 */
+	public LinkedHashMap<String,String> mergePdfDocuments(LinkedHashMap<String,LinkedHashMap<byte[],int[]>> formattedSpecificationMap, JsonObject jsonObject){
+		
+		LinkedHashMap<String, String> uploadedDocuments = new LinkedHashMap<String, String>();
+		String docType = "";
+		ByteArrayOutputStream outputStream = null;
+		PdfWriter pdfWriter = null;
+		byte[] content = null;
+		int[] pageNumberArray;
+		int currentPgNo;
+		PdfImportedPage pdfImportedPage;
+		PdfContentByte contentByte;
+		Rectangle rectangle;
+		com.itextpdf.text.Document document ;
+		String jcrId ="";
+		PdfReader reader;
+		LOG.info("Document splitting and merging : Started" + formattedSpecificationMap.toString());
+		try {
+			for (Map.Entry<String, LinkedHashMap<byte[], int[]>> outerEntry : formattedSpecificationMap.entrySet()) {
+				docType = outerEntry.getKey();
+				document = new com.itextpdf.text.Document();
+				outputStream = new ByteArrayOutputStream();
+				pdfWriter = PdfWriter.getInstance(document, outputStream);
+				document.open();
+				contentByte = pdfWriter.getDirectContent();
+				for (Map.Entry<byte[], int[]> innerEntry : outerEntry.getValue().entrySet()) {
+					content = innerEntry.getKey();
+					pageNumberArray = innerEntry.getValue();
+					reader = new PdfReader(content);
+					for (int number : pageNumberArray) {
+						currentPgNo = number;
+						rectangle = reader.getPageSize(currentPgNo);
+						document.setPageSize(rectangle);
+						document.newPage();
+						pdfImportedPage = pdfWriter.getImportedPage(reader, currentPgNo);
+						contentByte.addTemplate(pdfImportedPage, 0, 0);
+
+					}
+					pdfWriter.freeReader(reader);
+				}
+				document.close();
+				
+				jcrId = uploadMergedDocument(outputStream.toByteArray(),docType,jsonObject);
+				
+				uploadedDocuments.put(docType, jcrId);
+				
+				outputStream.flush();			
+				outputStream.close();
+				pdfWriter.close();
+				LOG.info("Document Type " + docType + " created.");
+
+			}
+
+		} catch (IOException e) {
+			LOG.info("Merging Docuemnts  : Exception MergeDocuments -- " + e);
+			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getStackTrace());
+			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getCause());
+
+		} catch (DocumentException e) {
+			LOG.info("Merging Docuemnts  : Exception MergeDocuments -- " + e);
+			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getStackTrace());
+			LOG.info("Merging Docuemnts : Exception MergeDocuments -- " + e.getCause());
+
+		}
+		return uploadedDocuments;
+
+	}
+	
+	/**
+	 * Uploading the merged PDF documents for new Scanning n Indexing
+	 * 
+	 * @param documentContent
+	 * @param docType
+	 * @param jsonObject
+	 * @return
+	 */
+	public String uploadMergedDocument(byte[] documentContent,String docType, JsonObject jsonObject){
+		LOG.info("Uploading the merged documents : Started");
+		String jcrId = "";
+		String schemeNo = "schemeNo";
+		String memberNo ="memberNo";
+		String workType = "";
+		Long processOid =0L;
+		String fileName = docType;
+		
+		if (jsonObject.get("schemeNo") != null) {
+			schemeNo = jsonObject.get("schemeNo").getAsString();
+			fileName = fileName +"-"+schemeNo;
+		}
+		if (jsonObject.get("memberNo") != null) {
+			memberNo = jsonObject.get("memberNo").getAsString();	
+			fileName = fileName +"-"+memberNo;
+		}
+		if (jsonObject.get("workType") != null) {
+			workType = jsonObject.get("workType").getAsString();			
+		}
+		if (jsonObject.get("processOID") != null) {
+			processOid = jsonObject.get("processOID").getAsLong();			
+		}
+		
+		Map<String,Object> metaDataMap = this.populateDocumentProperties(schemeNo,memberNo,workType,docType);
+		fileName = fileName + ".pdf";
+		String contentType = URLConnection.guessContentTypeFromName(fileName);
+		
+		
+		Document document = this.saveDocumentinIpp(documentContent, fileName, contentType,
+				processOid, metaDataMap);
+		jcrId = document.getId();
+		
+		LOG.info("After uploading the document : "+jcrId + "for DocType : " +docType);
+		return jcrId;
+	}
+
+	
+	
 
 }
-
