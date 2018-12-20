@@ -638,6 +638,7 @@ public class DocumentServices {
 		JsonObject response = null;
 		DataHandler dataHandler = attachment.getDataHandler();
 		InputStream inputStream = null;
+		List<String> documentIds ;
 
 		try {
 			inputStream = dataHandler.getInputStream();
@@ -664,7 +665,7 @@ public class DocumentServices {
 					if (counterLimit < (checkpointLimit + i)) {
 						checkpointLimit = counterLimit - i;
 					}
-					List<String> documentIds = new ArrayList<String>();
+					documentIds = new ArrayList<String>();
 					// Adding the checkpoint number of documentIDs to arraylist
 					// for converting the document
 					for (int j = 0; j < checkpointLimit; j++, i++) {
@@ -718,7 +719,9 @@ public class DocumentServices {
 		JsonObject response = null;
 		DataHandler dataHandler = attachment.getDataHandler();
 		InputStream inputStream;
-
+		List<String> documentIds;
+		int checkpointLimit;
+		
 		try {
 			inputStream = dataHandler.getInputStream();
 			List<String> documentContentLines = IOUtils.readLines(inputStream);
@@ -738,11 +741,11 @@ public class DocumentServices {
 				// from properties file
 				for (int i = counter; i < counterLimit;) {
 
-					int checkpointLimit = checkpoint;
+					checkpointLimit = checkpoint;
 					if (counterLimit < (checkpointLimit + i)) {
 						checkpointLimit = counterLimit - i;
 					}
-					List<String> documentIds = new ArrayList<String>();
+					documentIds = new ArrayList<String>();
 					// Adding the checkpoint number of documentIDs to arraylist
 					// for updating the docType
 					for (int j = 0; j < checkpointLimit; j++, i++) {

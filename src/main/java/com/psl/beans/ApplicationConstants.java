@@ -9,8 +9,7 @@ public enum ApplicationConstants {
 	OPERATIONS_PRODUCT("OperationsProduct"), CLAIMS_PRODUCT("ClaimsProduct"), NEW_BUSINESS_PRODUCT("NewBusinessProduct"),ROUTE_BY_WORKTYPE_PROCESS_DEFINITION("RouteByWorkType"),
 	REFERENCE_ID_XPATH("ProcessOid"),REVIEW_PROCESS_EXCEPTION_ID("ReviewProcessException"),
 	URL_STRING("/ipp-portal/services/rest/document-triage/documents/"),EXCEL_DUMP_NAME("Migration Report"), PROCESS_DATA_PATH_ID("ProcessData"), MEMBER_NAME_XPATH("MemberName"),
-	EXCEL_DUMP_KEYS("processInstanceOID,memberNumber,schemeNumber,workType,action"),REPOSITORY_FETCH_URL("Libcor.Rest.Dms/StorageProvider/Centera/GetDocument?CenteraKeyId="),
-	REPOSITORY_UPLOAD_URL("Libcor.Rest.Dms/StorageProvider/Centera/AddDocument");
+	EXCEL_DUMP_KEYS("processInstanceOID,memberNumber,schemeNumber,workType,action");
 
 
 	private String value;
