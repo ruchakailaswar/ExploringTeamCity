@@ -47,8 +47,5 @@
 		<property name="ippService" ref="ippService" />
 	</bean>
 
-	<bean id="documentRepositoryServicesPSL" class="com.psl.applications.DocumentRepositoryServices">
-		<property name="ippService" ref="ippService" />
-	</bean>
 </beans>
 
