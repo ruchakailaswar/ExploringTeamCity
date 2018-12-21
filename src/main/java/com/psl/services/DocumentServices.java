@@ -638,8 +638,7 @@ public class DocumentServices {
 		JsonObject response = null;
 		DataHandler dataHandler = attachment.getDataHandler();
 		InputStream inputStream = null;
-		List<String> documentIds ;
-
+		List<String> documentIds = null;
 		try {
 			inputStream = dataHandler.getInputStream();
 			List<String> documentContentLines = IOUtils.readLines(inputStream);
@@ -669,7 +668,7 @@ public class DocumentServices {
 					// Adding the checkpoint number of documentIDs to arraylist
 					// for converting the document
 					for (int j = 0; j < checkpointLimit; j++, i++) {
-						documentIds.add(documentContentLines.get(i));
+						documentIds.add(documentContentLines.get(i).split(",")[0]);
 					}
 					LOG.info(
 							"Inside convertDocBatch REST API Method -- Calling convertDocTiffToPDFBatch method and passimg the doc IDs list");
@@ -719,8 +718,8 @@ public class DocumentServices {
 		JsonObject response = null;
 		DataHandler dataHandler = attachment.getDataHandler();
 		InputStream inputStream;
-		List<String> documentIds;
 		int checkpointLimit;
+		List<String> documentIds = null;
 		
 		try {
 			inputStream = dataHandler.getInputStream();
@@ -737,6 +736,7 @@ public class DocumentServices {
 				if (length < counterLimit) {
 					counterLimit = length;
 				}
+				
 				// Looping the document ID's from counter till batch size read
 				// from properties file
 				for (int i = counter; i < counterLimit;) {
@@ -897,21 +897,24 @@ public class DocumentServices {
 	@Consumes(MediaType.APPLICATION_JSON)
 	public Response splitAndMergePdfDocument(String input) {
 		LOG.info("Splitting and Merging documents : Started " + input);
-		JsonObject jsonObject = ippService.parseJSONObject(input);
-		JsonArray documentSplitterArray = null;
 		JsonObject response = new JsonObject();
-	
-		if (jsonObject.get("documentSplitter") != null) {
-			documentSplitterArray = jsonObject.get("documentSplitter").getAsJsonArray();
-			jsonObject.remove("documentSplitter");
-		} else {
-			return Response.status(400)
-					.entity("{\"response\":\"'documentSplitter' parameter missing in request body.\"}").build();
-		}
+		JsonArray documentSplitterArray = null;
+		
+		
 		try {
-			LinkedHashMap<String,LinkedHashMap<byte[],int[]>> formattedSpecificationMap = ippService.populateDataForSplitMerge(documentSplitterArray);
+			JsonObject jsonObject = ippService.parseJSONObject(input);
+
+			if (jsonObject.get("documentSplitter") != null) {
+				documentSplitterArray = jsonObject.get("documentSplitter").getAsJsonArray();
+				jsonObject.remove("documentSplitter");
+			} else {
+				return Response.status(400)
+						.entity("{\"response\":\"'documentSplitter' parameter missing in request body.\"}").build();
+			}
 			
-			LinkedHashMap<String,String> uploadDetails = ippService.mergePdfDocuments(formattedSpecificationMap,jsonObject);
+			HashMap<String,HashMap<byte[],int[]>> formattedSpecificationMap = ippService.populateDataForSplitMerge(documentSplitterArray);
+			
+			HashMap<String,String> uploadDetails = ippService.mergePdfDocuments(formattedSpecificationMap,jsonObject);
 			LOG.info(uploadDetails.toString());
 			for (Map.Entry<String, String> detailsEntry : uploadDetails.entrySet()) {
 				response.addProperty(detailsEntry.getKey(), detailsEntry.getValue());

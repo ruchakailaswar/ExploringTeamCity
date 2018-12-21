@@ -1,17 +1,20 @@
 package com.psl.applications;
 
 import static org.eclipse.stardust.engine.core.spi.dms.RepositoryIdUtils.stripRepositoryId;
-
+import java.io.*;
+import java.net.URL;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
-import java.io.*;
 import java.net.URLConnection;
-import java.util.*;
-
+import com.psl.beans.ApplicationConstants;
+import javax.ws.rs.core.*;
 import javax.media.jai.RenderedImageAdapter;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
@@ -28,7 +31,7 @@ import org.eclipse.stardust.engine.api.runtime.*;
 import org.eclipse.stardust.engine.core.preferences.configurationvariables.ConfigurationVariable;
 import org.eclipse.stardust.engine.core.preferences.configurationvariables.ConfigurationVariables;
 import org.eclipse.stardust.engine.core.runtime.beans.AbortScope;
-
+import org.eclipse.stardust.engine.core.spi.dms.RepositoryIdUtils;
 import com.google.gson.*;
 import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Image;
@@ -47,15 +50,17 @@ import com.sun.media.jai.codec.ImageDecoder;
 public class IppService {
 
 	private ServiceFactory serviceFactory;
+	
+
 	private String ippPassword;
 	private String ippUser;
+	
 	static final Logger LOG = LogManager.getLogger(IppService.class);
 	private String[] activityIds;
     private String[] processIds;
     private HashSet<String> actIds;
     
 	public IppService() {
-
 	}
 
 	/**
@@ -76,6 +81,7 @@ public class IppService {
 
 	public DocumentManagementService getDocumentManagementService() {
 		return getServiceFactory().getDocumentManagementService();
+	
 	}
 
 	/**
@@ -86,7 +92,9 @@ public class IppService {
 
 	public AdministrationService getAdministrationService() {
 		return getServiceFactory().getAdministrationService();
+
 	}
+
 
 	public String getIppPassword() {
 		return ippPassword;
@@ -206,8 +214,6 @@ public class IppService {
 		}*/
 		
 		List<ActivityInstance> activityList = getQueryService().getAllActivityInstances(activityQuery);
-		String[] activityIds = {"VettingActivity_WaitingforDocuments","PendActivity","WaitingForBoardApproval","WaitingForFSB","PendActivity2","ConcessionPend","Wait_ReminderDelay","DynamicUIActivity"};
-		HashSet<String> actIds = new HashSet<String>(Arrays.asList(activityIds));
 		
         boolean foundWaitActivity = false;
         for (ActivityInstance ai : activityList) {
@@ -314,15 +320,23 @@ public class IppService {
 			mainObj.addProperty("totalCount", totalCount);
 
 			String docTypesStr = "";
-			for (Document doc : originalDocsList) {
-				if (doc.getProperty("DocumentType") != null) {
+			String dt = "";
+			for(Document doc : originalDocsList) {
+				if(doc.getProperty("DocumentType") != null) {
 					List<String> docTypes = (List) doc.getProperty("DocumentType");
-					if (docTypesStr.isEmpty())
+					
+					dt = getCSVS(docTypes); 
+					dt = dt != null && dt.equalsIgnoreCase("null") ? "" : dt;
+					
+					if(dt.isEmpty())
+						continue;
+					
+					if(docTypesStr.isEmpty())
 						docTypesStr = StringUtils.join(docTypes.iterator(), ",");
 					else
 						docTypesStr = docTypesStr + "," + StringUtils.join(docTypes.iterator(), ",");
 				}
-			}
+			} 
 
 			mainObj.addProperty("docTypesList", docTypesStr);
 		} catch (Exception e) {
@@ -515,7 +529,6 @@ public class IppService {
 
 	public Response prepareJSONData(List<Document> docsList) {
 		JsonObject mainObj = new JsonObject();
-
 		try {
 			mainObj = prerpareDocJSON(docsList);
 		} catch (Exception e) {
@@ -537,7 +550,9 @@ public class IppService {
 		if (props != null && props.size() > 0) {
 			docTypes = (List<String>) props.get("DocumentType");
 		}
-		return StringUtils.isNotEmpty(getCSVS(docTypes)) ? getCSVS(docTypes) : "Unassigned";
+		String dt = getCSVS(docTypes); ;
+		dt = dt != null && dt.equalsIgnoreCase("null") ? "" : dt;
+		return dt;
 	}
 
 	public static final String getCSVS(Collection<String> list) {
@@ -580,11 +595,13 @@ public class IppService {
 			LOG.info("Error stack trace is" + e.getStackTrace());
 			return "{\"fileName\":" + null + ",\n \"documentContent\":" + null + ",\n \"error\":"
 					+ "\"No Document Found with the requested DOC ID !!\"" + "}";
+
 		}
 		int[] arr = new int[docContent.length];
 		int i = 0;
 		for (byte b : docContent) {
 			arr[i++] = (0x000000FF) & b;
+
 		}
 
 		String response = "{\"fileName\":\"" + fileName + "\",\n \"documentContent\":" + Arrays.toString(arr)
@@ -687,7 +704,6 @@ public class IppService {
 			processDetails.put("processName", processInstance.getProcessName());
 			processDetails.put("rootProcessOid", Long.toString(processInstance.getRootProcessInstanceOID()));
 			LOG.info("Process Details :" + processDetails);
-
 			ProcessInstanceState processState = processInstance.getState();
 			String processStateName = (processState != null) ? processState.getName() : null;
 			processDetails.put("processState", processStateName);
@@ -728,7 +744,7 @@ public class IppService {
 			} else{
 				piQuery = ProcessInstanceQuery.findAlive();
 			} 
-			String[] processIds = {"{L1GenericModel}L1GenericProcess","{NewBusinessModel}VettingAndInstallationProcess","{NewBusinessModel}FSBRegistrationProcess","{NewBusinessModel}RatificationCommonSubProcess","{NewBusinessModel}SpecialRulesGenerationProcess","{AMLModel}AMLProcess","{ConfigurableReminder}ReminderProcess","{DynamicModel}DynamicProcess"};
+			
 			FilterOrTerm processIdOrTerm = piQuery.getFilter().addOrTerm();
 	        for (String processId : processIds) {
 	            processIdOrTerm.add(new ProcessDefinitionFilter(processId, false));
@@ -871,7 +887,7 @@ public class IppService {
 		}
 		LOG.info("Added document with new document type as : document types " + document.getDocumentType());
 		LOG.info("Added Document properties  : " + document.getProperties());
-
+	
 		LOG.info("Setting process attachments : List of attachments " + attachments);
 
 		setProcessData(processOid, ApplicationConstants.PROCESS_ATTACHMENTS.getValue(), attachments);
@@ -933,6 +949,7 @@ public class IppService {
 	 * @return
 	 */
 	public void removeDocument(String docId, long processOid) {
+
 		List<Document> processAttachments = null;
 		List<Document> attachedDocs = new ArrayList<Document>();
 		Object processData = getProcessData(processOid, ApplicationConstants.PROCESS_ATTACHMENTS.getValue());
@@ -1380,12 +1397,14 @@ public class IppService {
 			row.createCell(10).setCellValue(process.get("lastModificationTime"));
 		}
 
+		
 		File file = new File("Interrupted-Activities.xlsx");
 		FileOutputStream fileOut = new FileOutputStream(file);
 		workbook.write(fileOut);
 
 		fileOut.close();
 		return file;
+	
 	}
 
 	/**
@@ -1434,10 +1453,10 @@ public class IppService {
 
 					// No of pages to iterate on
 					int numberOfPages = TiffImage.getNumberOfPages(myTiffFile);
-
+					
 					writer.setStrictImageSequence(true);
 					document.open();
-
+					
 					LOG.info("Coverting Doc from TIF to PDF with JCR UID: " + doc.getId());
 					for (int i = 1; i <= numberOfPages; i++) {
 						Image tempImage = TiffImage.getTiffImage(myTiffFile, i);
@@ -1453,10 +1472,9 @@ public class IppService {
 						document.setPageSize(pageSize);
 						document.newPage();
 						document.add(tempImage);
-
 					}
-					document.close();
-					outfile.flush();
+						document.close();
+						outfile.flush();
 
 					// Converting the extension to PDF
 					String name = doc.getName();
@@ -1566,77 +1584,282 @@ public class IppService {
 	 * @param input
 	 * @return
 	 */
-	public List<DeploymentInfo> changeConfigVariablesandDeployModel(List<String> modelDataList, JsonObject jsonObject,
-			boolean gitRepo) {
+	public List<DeploymentInfo> changeConfigVariablesandDeployModel(HashMap<String, String> modelDataList,
+			JsonObject jsonObject, boolean gitRepo) {
+		LOG.info(" Changing configuration variables and Deploying the Model : Started");
 		List<DeploymentInfo> deploymentInfo = new ArrayList<DeploymentInfo>();
 		List<DeploymentElement> list = new ArrayList<DeploymentElement>();
 
-		String configName = null;
-		String configValue = null;
+		String modelName = "";
 		byte[] byteArray = null;
-		FileInputStream fis = null;
-		int byteSize = 0;
+		String server = "";
+		String elementName = "";
+		Properties server_prop = null;
+		Properties config_prop = null;
+		List<ConfigurationVariable> cv ;
+		ConfigurationVariables cvs ;
+		String configName;
+		String configValueProp;
+		String configValue;
+		String serverConfigKey;
+		String serverConfigValue;
+		String[] serverConfigArr;
+		DeploymentElement de;
+		Map<String, String> configTypeMap = new HashMap<String, String>();
+		String c_key;
+		String c_value;
 
-		for (String modelData : modelDataList) {
+
+		for (Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+			elementName = entry.getKey();
+			if (elementName.equalsIgnoreCase("server")) {
+				server = entry.getValue().getAsString().toUpperCase();
+			}
+		}
+		server_prop = readPropertiesFile("server-details-map.properties");
+		config_prop = readPropertiesFile("configvariable-map.properties");
+
+		String configType = server_prop.getProperty(server);
+		String[] configTypeArr = configType.split(",");
+		List<String> configTypeList = Arrays.asList(configTypeArr);
+
+		for (String cType : configTypeList) {
+			c_key = server + "." + cType;
+			c_value = server_prop.getProperty(c_key.trim());
+			configTypeMap.put(c_key, c_value);
+		}
+
+		for (Map.Entry<String, String> modelData : modelDataList.entrySet()) {
 			if (modelData != null) {
+				modelName = modelData.getKey();
 				if (gitRepo) {
-					byteArray = modelData.getBytes();
+					byteArray = modelData.getValue().getBytes();
 				} else {
-					File file = new File(modelData);
-					if (file.exists()) {
-						byteArray = new byte[(int) file.length()];
-						try {
-							fis = new FileInputStream(file);
-							byteSize = fis.read(byteArray);
-						} catch (IOException e) {
-							LOG.info("ChangeConfigVariables and Deploy Model Exception -- " + e.getStackTrace());
-						} finally {
-							if (fis != null) {
-								try {
-									fis.close();
-								} catch (IOException e) {
-									LOG.info(
-											"ChangeConfigVariables and Deploy Model Exception -- " + e.getStackTrace());
-								}
-							}
-
-						}
-					}
+					byteArray = getBytesFromModelFile(modelData.getValue());
 				}
-
-				Set<Map.Entry<String, JsonElement>> jsonMap = jsonObject.entrySet();
-
-				List<ConfigurationVariable> cv = new ArrayList<ConfigurationVariable>();
-				ConfigurationVariables cvs = getAdministrationService().getConfigurationVariables(byteArray);
+				cv = new ArrayList<ConfigurationVariable>();
+				cvs = getAdministrationService().getConfigurationVariables(byteArray);
 				cv = cvs.getConfigurationVariables();
 
-				for (Map.Entry<String, JsonElement> mapEntry : jsonMap) {
+				for (ConfigurationVariable configurationVariable : cv) {
+					configName = configurationVariable.getName();
+					configValueProp = config_prop.getProperty(modelName + "." + configName);
+					configValue = null;
+					serverConfigKey = "";
+					serverConfigValue = "";
+					if (configValueProp != null) {
+						serverConfigArr = configValueProp.split("\\*");
 
-					configName = mapEntry.getKey();
-					configValue = mapEntry.getValue().getAsString();
-					for (ConfigurationVariable configurationVariable : cv) {
-						if (configurationVariable.getName().equals(configName)) {
-							configurationVariable.setValue(configValue);
+						if (serverConfigArr.length > 1) {
+							serverConfigKey = serverConfigArr[0];
+							serverConfigKey = serverConfigKey.replace("Server", server);
+							serverConfigValue = configTypeMap.get(serverConfigKey);
+							configValue = serverConfigValue + serverConfigArr[1];
+						} else {
+							if (serverConfigArr[0].contains(".")) {
+								serverConfigKey = serverConfigArr[0];
+								serverConfigKey = serverConfigKey.replace("Server", server);
+								serverConfigValue = configTypeMap.get(serverConfigKey);
+								configValue = serverConfigValue;
+							} else {
+								configValue = configValueProp;
+							}
 						}
-
+						LOG.info("Updating the ConfigValue to = "+configValue);
+						configurationVariable.setValue(configValue);
 					}
+
 				}
+
 				cvs.setConfigurationVariables(cv);
 				getAdministrationService().saveConfigurationVariables(cvs, true);
 
-				DeploymentElement de = new DeploymentElement(byteArray);
+				de = new DeploymentElement(byteArray);
 				list.add(de);
+
 			} else {
-				return new ArrayList<DeploymentInfo>();
+				return null;
 			}
 		}
 		DeploymentOptions options = new DeploymentOptions();
 		options.setIgnoreWarnings(true);
 		deploymentInfo = getAdministrationService().deployModel(list, options);
-
 		return deploymentInfo;
 	}
 
+	
+	
+	/**
+	 * Read the specified properties file and return it as Properties object
+	 * 
+	 * @param fileName
+	 * @return
+	 */
+	public Properties readPropertiesFile(String fileName) {
+		Properties properties = null;
+		InputStream is = null;
+		is = getClass().getClassLoader().getResourceAsStream(fileName);
+		if (is != null) {
+			try {
+				properties = new Properties();
+				properties.load(is);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
+		return properties;
+	}
+
+	
+	
+	/**
+	 * Read the modelPathString model file and return it 
+	 * as byte array
+	 * 
+	 * @param modelPathString
+	 * @return
+	 */
+		public byte[] getBytesFromModelFile(String modelPathString) {
+			byte[] byteArray = null;
+			FileInputStream fis = null;
+			File file = new File(modelPathString);
+			if (file.exists()) {
+				byteArray = new byte[(int) file.length()];
+				try {
+					fis = new FileInputStream(file);
+					fis.read(byteArray);
+				} catch (IOException e) {
+					e.printStackTrace();
+				} finally {
+					if (fis != null) {
+						try {
+							fis.close();
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+
+					}
+
+				}
+			}
+
+			return byteArray;
+		}
+
+		
+		
+	/**
+	 * Read the model files from git repository and return map of filename and
+	 * model file
+	 * 
+	 * @param path
+	 * @param filenamesExists
+	 * @param fileNames
+	 * @return
+	 */
+	public HashMap<String, String> getFilesFromRepository(String path, boolean filenamesExists, String fileNames) {
+		HashMap<String, String> modelFiles = new HashMap<String, String>();
+		ZipInputStream zipInputStream = null;
+		String fileNameArr[] = fileNames.split(",");
+		String[] pathParts;
+		int pathLen;
+		String fName;
+		StringWriter stringWriter;
+		String fileContent;
+		try {
+			zipInputStream = new ZipInputStream(new URL(path).openStream());
+			ZipEntry zipEntry;
+			while ((zipEntry = zipInputStream.getNextEntry()) != null) {
+
+				if (!zipEntry.isDirectory() && zipEntry.getName().endsWith("xpdl")) {
+					pathParts = zipEntry.getName().toString().trim().split("\\/");
+					pathLen = pathParts.length;
+					fName = pathParts[pathLen - 1].split("\\.")[0];
+					stringWriter = new StringWriter();
+
+					IOUtils.copy(zipInputStream, stringWriter);
+
+					fileContent = stringWriter.toString().trim();
+
+					if (filenamesExists) {
+
+						for (String fileName : fileNameArr) {
+
+							if (zipEntry.getName().contains(fileName)) {
+
+								modelFiles.put(fName, fileContent);
+
+							}
+						}
+					} else {
+
+						modelFiles.put(fName, fileContent);
+
+					}
+				}
+			}
+
+		} catch (Exception e) {
+			LOG.info("getFilesFromRepository REST API : Exception in fetching model files for automatic deployment -- "
+					+ e);
+			LOG.info("getFilesFromRepository REST API : Exception in fetching model files for automatic deployment -- "
+					+ e.getStackTrace());
+			LOG.info("getFilesFromRepository REST API : Exception in fetching model files for automatic deployment -- "
+					+ e.getCause());
+		} finally {
+			try {
+				zipInputStream.close();
+			} catch (IOException e) {
+				LOG.info(
+						"getFilesFromRepository REST API : Exception in fetching model files for automatic deployment -- "
+								+ e);
+				LOG.info(
+						"getFilesFromRepository REST API : Exception in fetching model files for automatic deployment -- "
+								+ e.getStackTrace());
+				LOG.info(
+						"getFilesFromRepository REST API : Exception in fetching model files for automatic deployment -- "
+								+ e.getCause());
+			}
+		}
+
+		return modelFiles;
+	}
+
+
+	
+	
+	/**
+	 * Read the model files from local File/Folder location and return map of
+	 * filename and path to model file
+	 * 
+	 * @param path
+	 * @param dir
+	 * @param filenamesExists
+	 * @param fileNames
+	 * @return
+	 */
+	public HashMap<String, String> getFilesFromDirectory(String path, File dir, boolean filenamesExists,
+			String fileNames) {
+		HashMap<String, String> completePaths = new HashMap<String, String>();
+		String fileNameArr[] = null;
+
+		if (!filenamesExists) {
+			for (File file : dir.listFiles()) {
+				fileNames = fileNames + file.getName() + ",";
+			}
+			fileNames = fileNames.substring(0, fileNames.length() - 1);
+		}
+		fileNameArr = fileNames.split(",");
+		String fName;
+		for (String fileName : fileNameArr) {
+			fName = fileName.split("\\.")[0];
+			completePaths.put(fName, path + fileName.trim());
+		}
+		return completePaths;
+	}
+	
+	
 	/**
 	 * Creates UserGroup with the given name, id and description
 	 * 
@@ -1753,6 +1976,8 @@ public class IppService {
 		List<Document> documentList = getDocumentManagementService().getDocuments(documentIdList);
 
 		for (Document doc : documentList) {
+			String docName = doc.getName().toLowerCase();
+			if(!(docName.endsWith(".tiff") || docName.endsWith(".tif"))) break;
 
 			byte[] docContent = getDocumentManagementService().retrieveDocumentContent(doc.getId());
 
@@ -2061,10 +2286,10 @@ public class IppService {
 	 * @param documentSplitterArray
 	 * @return
 	 */
-	public LinkedHashMap<String,LinkedHashMap<byte[],int[]>> populateDataForSplitMerge(JsonArray documentSplitterArray){
-		LinkedHashMap<String,LinkedHashMap<byte[],int[]>> formattedSpecificationMap = new LinkedHashMap<String,LinkedHashMap<byte[],int[]>>();
-		LinkedHashMap<byte[],LinkedHashMap<String,int[]>> specificationMap = new LinkedHashMap<byte[],LinkedHashMap<String,int[]>>();
-		LinkedHashMap<String,int[]> innerSpecification;
+	public HashMap<String,HashMap<byte[],int[]>> populateDataForSplitMerge(JsonArray documentSplitterArray){
+		HashMap<String,HashMap<byte[],int[]>> formattedSpecificationMap = new HashMap<String,HashMap<byte[],int[]>>();
+		HashMap<byte[],HashMap<String,int[]>> specificationMap = new HashMap<byte[],HashMap<String,int[]>>();
+		HashMap<String,int[]> innerSpecification;
 		JsonArray documentSplitterInnerArray = null;
 		JsonArray documentPageNumberArray = null;
 		String jcrIdString = "";
@@ -2204,14 +2429,14 @@ public class IppService {
 	 * @param originalSpecificationMap
 	 * @return
 	 */
-	public LinkedHashMap<String,LinkedHashMap<byte[],int[]>> formatSplittingSpecification(LinkedHashMap<byte[],LinkedHashMap<String,int[]>> originalSpecificationMap){
-		LinkedHashMap<byte[],int[]> innerMap ;
-		LinkedHashMap<String,LinkedHashMap<byte[],int[]>> formattedSpecificationMap = new LinkedHashMap<String,LinkedHashMap<byte[],int[]>>();
+	public HashMap<String,HashMap<byte[],int[]>> formatSplittingSpecification(HashMap<byte[],HashMap<String,int[]>> originalSpecificationMap){
+		HashMap<byte[],int[]> innerMap ;
+		HashMap<String,HashMap<byte[],int[]>> formattedSpecificationMap = new HashMap<String,HashMap<byte[],int[]>>();
 		byte[] filedata =null;
 		String currentDocType= "";
 		int[] currentPgNoArr = null;
 		
-		for (Map.Entry<byte[], LinkedHashMap<String,int[]>> originalOuterMap : originalSpecificationMap.entrySet()) 
+		for (Map.Entry<byte[], HashMap<String,int[]>> originalOuterMap : originalSpecificationMap.entrySet()) 
 		{
 			filedata = originalOuterMap.getKey();
 			for(Map.Entry<String, int[]> originalInnerMap : originalOuterMap.getValue().entrySet())
@@ -2244,9 +2469,9 @@ public class IppService {
 	 * @param jsonObject
 	 * @return
 	 */
-	public LinkedHashMap<String,String> mergePdfDocuments(LinkedHashMap<String,LinkedHashMap<byte[],int[]>> formattedSpecificationMap, JsonObject jsonObject){
+	public HashMap<String,String> mergePdfDocuments(HashMap<String,HashMap<byte[],int[]>> formattedSpecificationMap, JsonObject jsonObject){
 		
-		LinkedHashMap<String, String> uploadedDocuments = new LinkedHashMap<String, String>();
+		HashMap<String, String> uploadedDocuments = new HashMap<String, String>();
 		String docType = "";
 		ByteArrayOutputStream outputStream = null;
 		PdfWriter pdfWriter = null;
@@ -2261,7 +2486,7 @@ public class IppService {
 		PdfReader reader;
 		LOG.info("Document splitting and merging : Started" + formattedSpecificationMap.toString());
 		try {
-			for (Map.Entry<String, LinkedHashMap<byte[], int[]>> outerEntry : formattedSpecificationMap.entrySet()) {
+			for (Map.Entry<String, HashMap<byte[], int[]>> outerEntry : formattedSpecificationMap.entrySet()) {
 				docType = outerEntry.getKey();
 				document = new com.itextpdf.text.Document();
 				outputStream = new ByteArrayOutputStream();

@@ -282,6 +282,7 @@ public class ProcessDetailsService {
 		String id = null;
 		String value = null;
 		String memberNo, memberName, schemeNo, workType, schemeName = "";
+		Long referenceId = 0L;
 		ProcessInstances processInstances = null;
 		List<Map<String, String>> activitiesDetails = null;
 		
@@ -326,14 +327,16 @@ public class ProcessDetailsService {
 					memberName = (String)ippService.getProcessData(processInstanceOID, ApplicationConstants.MEMBER_NAME_XPATH.getValue());
 					schemeNo = (String)ippService.getProcessData(processInstanceOID, ApplicationConstants.META_DATA_SCHEME_NO.getValue());
 					schemeName = (String)ippService.getProcessData(processInstanceOID, ApplicationConstants.META_DATA_SCHEMENAME.getValue());
+					referenceId = (Long)ippService.getProcessData(processInstanceOID, ApplicationConstants.REFERENCE_ID_XPATH.getValue());
 					
 					jo = new JsonObject();
-					jo.addProperty("processOID", processInstanceOID);
+					jo.addProperty("currentProcessOID", processInstanceOID);
 					jo.addProperty("memberNo", memberNo);
 					jo.addProperty("memberName", memberName);
 					jo.addProperty("schemeNo", schemeNo);
 					jo.addProperty("workType", workType);
 					jo.addProperty("schemeName", schemeName);
+					jo.addProperty("referenceId", referenceId);
 					if (processDetailsMap != null) {
 						Set<Map.Entry<String, String>> jsonMap = processDetailsMap.entrySet();
 						if (jsonMap != null) {
