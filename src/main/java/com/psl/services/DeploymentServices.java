@@ -112,121 +112,133 @@ public class DeploymentServices {
 	@Consumes({ "application/json" })
 	@Produces({ "application/json" })
 	public Response deployModel(String input) {
-		LOG.info("Automatic Deployment of Models : Started "+input);
+		LOG.info("Automatic Deployment of Models : Started " + input);
 		List<DeploymentInfo> info = new ArrayList<DeploymentInfo>();
 		File dir = null;
 
 		String path = "";
 		String fileNames = "";
+		boolean isFailure = false;
+		JsonObject outer = new JsonObject();
+		JsonObject response = new JsonObject();
+		JsonObject error_warnings;
+		JsonObject warnings;
+		String modelId;
+		Response responseObj = null;
 
-		HashMap<String, String> completeData = new HashMap<String, String>();
+		HashMap<String, String> completeData = null;
 		boolean filenamesExists = false;
 		boolean gitRepo = true;
-		try{
+		try {
 			JsonObject jsonObject = ippService.parseJSONObject(input);
 			java.lang.System.setProperty("https.protocols", "TLSv1,TLSv1.1,TLSv1.2");
-	
+
 			if (jsonObject.get(ApplicationConstants.GIT_REPO_PARAM.getValue()) != null) {
 				gitRepo = jsonObject.get(ApplicationConstants.GIT_REPO_PARAM.getValue()).getAsBoolean();
 				jsonObject.remove(ApplicationConstants.GIT_REPO_PARAM.getValue());
-	
+
 			}
-	
+
 			if (jsonObject.get(ApplicationConstants.PATH_PARAM.getValue()) != null) {
 				path = jsonObject.get(ApplicationConstants.PATH_PARAM.getValue()).getAsString();
-				
+
 				if (jsonObject.get(ApplicationConstants.FILENAME_PARAM.getValue()) != null) {
 					fileNames = jsonObject.get(ApplicationConstants.FILENAME_PARAM.getValue()).getAsString();
-					
+
 					filenamesExists = true;
 					jsonObject.remove(ApplicationConstants.FILENAME_PARAM.getValue());
 				}
-				
+
 				if (!gitRepo) {
 					dir = new File(path);
 					if (!dir.isDirectory()) {
 						return Response.status(500).entity(ApplicationConstants.INVALID_PATH_ERROR.getValue()).build();
 					}
 					completeData = ippService.getFilesFromDirectory(path, dir, filenamesExists, fileNames);
-				}
-				else{
+				} else {
 					completeData = ippService.getFilesFromRepository(path, filenamesExists, fileNames);
 				}
-				
+
 				jsonObject.remove(ApplicationConstants.PATH_PARAM.getValue());
-	
+
 			} else {
 				return Response.status(400).entity(ApplicationConstants.PATH_ERROR.getValue()).build();
 			}
-	
-			for (String string : completeData.keySet()) {
-				LOG.info("Model Name = "+string);
+
+			if (completeData != null && completeData.size() > 0) {
+				for (String string : completeData.keySet()) {
+					LOG.info("Model Name = " + string);
+				}
+				info = this.ippService.changeConfigVariablesandDeployModel(completeData, jsonObject, gitRepo);
+			} else {
+				LOG.info("Inside else");
+				return Response.status(400)
+						.entity("{\"response\":\"Could not get the model files for deployment.. Please check and try again..!!\"}")
+						.build();
 			}
+
 			
-			info = this.ippService.changeConfigVariablesandDeployModel(completeData, jsonObject, gitRepo);
 		} catch (Exception e) {
 			LOG.info("Deploy Model REST API : Exception in deployModel -- " + e);
 			LOG.info("Deploy Model REST API : Exception in deployModel -- " + e.getStackTrace());
 			LOG.info("Deploy Model REST API : Exception in deployModel -- " + e.getCause());
+			return Response.status(400)
+					.entity("{\"response\":\"Could not get the model files for deployment.. Please check and try again..!!\"}")
+					.build();
+			
 		}
-			
-	
-			boolean isFailure = false;
-			JsonObject outer = new JsonObject();
-			JsonObject response = new JsonObject();
-			JsonObject error_warnings;
-			JsonObject warnings ;
-			String modelId;
-		
-			if (info != null) {
-				for (DeploymentInfo deploymentInfo : info) {
-					if (deploymentInfo.hasErrors()) {
-						isFailure = true;
-						break;
-	
-					}
-				}
-	
-				if (isFailure) {
-					response.addProperty("result", "Failure");
-					for (DeploymentInfo deploymentInfo : info) {
-						if (deploymentInfo.hasErrors() || deploymentInfo.hasWarnings()) {
-							modelId = deploymentInfo.getId();
-							error_warnings = new JsonObject();
-							error_warnings.addProperty("Errors", (String) deploymentInfo.getErrors().toString());
-							error_warnings.addProperty("Warnings", (String) deploymentInfo.getWarnings().toString());
-							response.add(modelId, error_warnings);
-	
-						}
-					}
-				} else {
-					response.addProperty("result", "Successfully Deployed Models");
-					for (DeploymentInfo deploymentInfo : info) {
-						if (deploymentInfo.hasWarnings()) {
-							modelId = deploymentInfo.getId();
-							warnings = new JsonObject();
-							warnings.addProperty("Warnings", (String) deploymentInfo.getWarnings().toString());
-							LOG.warn(warnings);
-							response.add(modelId, warnings);
-							LOG.info(response);
-	
-						}
-					}
-				}
-	
-				outer.add("response", response);
-			
-			if (isFailure) {
 
-				return Response.serverError().status(500).entity(outer.toString()).build();
+		if (info != null) {
+			for (DeploymentInfo deploymentInfo : info) {
+				if (deploymentInfo.hasErrors()) {
+					isFailure = true;
+					break;
+
+				}
+			}
+
+			if (isFailure) {
+				response.addProperty("result", "Failure");
+				for (DeploymentInfo deploymentInfo : info) {
+					if (deploymentInfo.hasErrors() || deploymentInfo.hasWarnings()) {
+						modelId = deploymentInfo.getId();
+						error_warnings = new JsonObject();
+						error_warnings.addProperty("Errors", (String) deploymentInfo.getErrors().toString());
+						error_warnings.addProperty("Warnings", (String) deploymentInfo.getWarnings().toString());
+						response.add(modelId, error_warnings);
+
+					}
+				}
 			} else {
-				return Response.ok(outer.toString(), MediaType.APPLICATION_JSON).status(200).build();
+				response.addProperty("result", "Successfully Deployed Models");
+				for (DeploymentInfo deploymentInfo : info) {
+					if (deploymentInfo.hasWarnings()) {
+						modelId = deploymentInfo.getId();
+						warnings = new JsonObject();
+						warnings.addProperty("Warnings", (String) deploymentInfo.getWarnings().toString());
+						LOG.warn(warnings);
+						response.add(modelId, warnings);
+						LOG.info(response);
+
+					}
+				}
+			}
+
+			outer.add("response", response);
+
+			if (isFailure) {
+				responseObj = Response.serverError().status(500).entity(outer.toString()).build();
+				
+			} else {
+				responseObj = Response.ok(outer.toString(), MediaType.APPLICATION_JSON).status(200).build();
 
 			}
 		} else {
 			String failedMessage = "{\"response\":\"Something went wrong. Please try again!.\"}";
-			return Response.status(500).entity(failedMessage).build();
+			responseObj = Response.status(500).entity(failedMessage).build();
 		}
+		return responseObj;
 	}
+	
 
 }

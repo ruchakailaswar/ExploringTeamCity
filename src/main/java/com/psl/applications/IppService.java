@@ -1846,7 +1846,9 @@ public class IppService {
 
 		if (!filenamesExists) {
 			for (File file : dir.listFiles()) {
-				fileNames = fileNames + file.getName() + ",";
+				if(file.getName().endsWith(".xpdl")){
+					fileNames = fileNames + file.getName() + ",";
+				}
 			}
 			fileNames = fileNames.substring(0, fileNames.length() - 1);
 		}
