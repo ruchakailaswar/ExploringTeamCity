@@ -1630,52 +1630,54 @@ public class IppService {
 		}
 
 		for (Map.Entry<String, String> modelData : modelDataList.entrySet()) {
-			if (modelData != null) {
+			if ((modelData.getKey() != null || modelData.getKey() != "") && (modelData.getValue() != null || modelData.getValue() != "")) {
 				modelName = modelData.getKey();
 				if (gitRepo) {
 					byteArray = modelData.getValue().getBytes();
 				} else {
 					byteArray = getBytesFromModelFile(modelData.getValue());
 				}
-				cv = new ArrayList<ConfigurationVariable>();
-				cvs = getAdministrationService().getConfigurationVariables(byteArray);
-				cv = cvs.getConfigurationVariables();
+				if(byteArray != null){
+					cv = new ArrayList<ConfigurationVariable>();
+					cvs = getAdministrationService().getConfigurationVariables(byteArray);
+					cv = cvs.getConfigurationVariables();
 
-				for (ConfigurationVariable configurationVariable : cv) {
-					configName = configurationVariable.getName();
-					configValueProp = config_prop.getProperty(modelName + "." + configName);
-					configValue = null;
-					serverConfigKey = "";
-					serverConfigValue = "";
-					if (configValueProp != null) {
-						serverConfigArr = configValueProp.split("\\*");
+					for (ConfigurationVariable configurationVariable : cv) {
+						configName = configurationVariable.getName();
+						configValueProp = config_prop.getProperty(modelName + "." + configName);
+						configValue = null;
+						serverConfigKey = "";
+						serverConfigValue = "";
+						if (configValueProp != null) {
+							serverConfigArr = configValueProp.split("\\*");
 
-						if (serverConfigArr.length > 1) {
-							serverConfigKey = serverConfigArr[0];
-							serverConfigKey = serverConfigKey.replace("Server", server);
-							serverConfigValue = configTypeMap.get(serverConfigKey);
-							configValue = serverConfigValue + serverConfigArr[1];
-						} else {
-							if (serverConfigArr[0].contains(".")) {
+							if (serverConfigArr.length > 1) {
 								serverConfigKey = serverConfigArr[0];
 								serverConfigKey = serverConfigKey.replace("Server", server);
 								serverConfigValue = configTypeMap.get(serverConfigKey);
-								configValue = serverConfigValue;
+								configValue = serverConfigValue + serverConfigArr[1];
 							} else {
-								configValue = configValueProp;
+								if (serverConfigArr[0].contains(".")) {
+									serverConfigKey = serverConfigArr[0];
+									serverConfigKey = serverConfigKey.replace("Server", server);
+									serverConfigValue = configTypeMap.get(serverConfigKey);
+									configValue = serverConfigValue;
+								} else {
+									configValue = configValueProp;
+								}
 							}
+							LOG.info("Updating the ConfigValue to = "+configValue);
+							configurationVariable.setValue(configValue);
 						}
-						LOG.info("Updating the ConfigValue to = "+configValue);
-						configurationVariable.setValue(configValue);
+
 					}
 
+					cvs.setConfigurationVariables(cv);
+					getAdministrationService().saveConfigurationVariables(cvs, true);
+
+					de = new DeploymentElement(byteArray);
+					list.add(de);
 				}
-
-				cvs.setConfigurationVariables(cv);
-				getAdministrationService().saveConfigurationVariables(cvs, true);
-
-				de = new DeploymentElement(byteArray);
-				list.add(de);
 
 			} else {
 				return null;
@@ -1742,7 +1744,10 @@ public class IppService {
 					}
 
 				}
+			}else{
+				throw new RuntimeException("The specified model file "+modelPathString+" does not exist, Please check and try again..!");
 			}
+
 
 			return byteArray;
 		}
