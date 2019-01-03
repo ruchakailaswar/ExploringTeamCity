@@ -1630,54 +1630,52 @@ public class IppService {
 		}
 
 		for (Map.Entry<String, String> modelData : modelDataList.entrySet()) {
-			if ((modelData.getKey() != null || modelData.getKey() != "") && (modelData.getValue() != null || modelData.getValue() != "")) {
+			if (modelData != null) {
 				modelName = modelData.getKey();
 				if (gitRepo) {
 					byteArray = modelData.getValue().getBytes();
 				} else {
 					byteArray = getBytesFromModelFile(modelData.getValue());
 				}
-				if(byteArray != null){
-					cv = new ArrayList<ConfigurationVariable>();
-					cvs = getAdministrationService().getConfigurationVariables(byteArray);
-					cv = cvs.getConfigurationVariables();
+				cv = new ArrayList<ConfigurationVariable>();
+				cvs = getAdministrationService().getConfigurationVariables(byteArray);
+				cv = cvs.getConfigurationVariables();
 
-					for (ConfigurationVariable configurationVariable : cv) {
-						configName = configurationVariable.getName();
-						configValueProp = config_prop.getProperty(modelName + "." + configName);
-						configValue = null;
-						serverConfigKey = "";
-						serverConfigValue = "";
-						if (configValueProp != null) {
-							serverConfigArr = configValueProp.split("\\*");
+				for (ConfigurationVariable configurationVariable : cv) {
+					configName = configurationVariable.getName();
+					configValueProp = config_prop.getProperty(modelName + "." + configName);
+					configValue = null;
+					serverConfigKey = "";
+					serverConfigValue = "";
+					if (configValueProp != null) {
+						serverConfigArr = configValueProp.split("\\*");
 
-							if (serverConfigArr.length > 1) {
+						if (serverConfigArr.length > 1) {
+							serverConfigKey = serverConfigArr[0];
+							serverConfigKey = serverConfigKey.replace("Server", server);
+							serverConfigValue = configTypeMap.get(serverConfigKey);
+							configValue = serverConfigValue + serverConfigArr[1];
+						} else {
+							if (serverConfigArr[0].contains(".")) {
 								serverConfigKey = serverConfigArr[0];
 								serverConfigKey = serverConfigKey.replace("Server", server);
 								serverConfigValue = configTypeMap.get(serverConfigKey);
-								configValue = serverConfigValue + serverConfigArr[1];
+								configValue = serverConfigValue;
 							} else {
-								if (serverConfigArr[0].contains(".")) {
-									serverConfigKey = serverConfigArr[0];
-									serverConfigKey = serverConfigKey.replace("Server", server);
-									serverConfigValue = configTypeMap.get(serverConfigKey);
-									configValue = serverConfigValue;
-								} else {
-									configValue = configValueProp;
-								}
+								configValue = configValueProp;
 							}
-							LOG.info("Updating the ConfigValue to = "+configValue);
-							configurationVariable.setValue(configValue);
 						}
-
+						LOG.info("Updating the ConfigValue to = "+configValue);
+						configurationVariable.setValue(configValue);
 					}
 
-					cvs.setConfigurationVariables(cv);
-					getAdministrationService().saveConfigurationVariables(cvs, true);
-
-					de = new DeploymentElement(byteArray);
-					list.add(de);
 				}
+
+				cvs.setConfigurationVariables(cv);
+				getAdministrationService().saveConfigurationVariables(cvs, true);
+
+				de = new DeploymentElement(byteArray);
+				list.add(de);
 
 			} else {
 				return null;
@@ -1744,10 +1742,7 @@ public class IppService {
 					}
 
 				}
-			}else{
-				throw new RuntimeException("The specified model file "+modelPathString+" does not exist, Please check and try again..!");
 			}
-
 
 			return byteArray;
 		}
@@ -1851,9 +1846,7 @@ public class IppService {
 
 		if (!filenamesExists) {
 			for (File file : dir.listFiles()) {
-				if(file.getName().endsWith(".xpdl")){
-					fileNames = fileNames + file.getName() + ",";
-				}
+				fileNames = fileNames + file.getName() + ",";
 			}
 			fileNames = fileNames.substring(0, fileNames.length() - 1);
 		}
@@ -2494,7 +2487,7 @@ public class IppService {
 		LOG.info("Document splitting and merging : Started" + formattedSpecificationMap.toString());
 		try {
 			for (Map.Entry<String, HashMap<byte[], int[]>> outerEntry : formattedSpecificationMap.entrySet()) {
-				docType = outerEntry.getKey();
+				docType = outerEntry.getKey().trim();
 				document = new com.itextpdf.text.Document();
 				outputStream = new ByteArrayOutputStream();
 				pdfWriter = PdfWriter.getInstance(document, outputStream);
