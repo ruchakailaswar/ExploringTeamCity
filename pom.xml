@@ -3,7 +3,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.persistentsysltd</groupId>
   <artifactId>psl-liberty-services</artifactId>
-  <version>0.5.0</version> 
+  <version>0.5.1</version> 
 
 <!--  Shared version number properties   -->
  <properties>
