@@ -17,8 +17,7 @@
 		<property name="ippPassword" value="motu" />
 		<property name="activityIds"
 			value="libertyproperty!{processMatching.activityIds}" />
-		<property name="processIds"
-			value="libertyproperty!{processMatching.processIds}" />	
+		<property name="processIds" value="libertyproperty!{processMatching.processIds}" />
 	</bean>
 
 	<bean id="documentServicesPSL" class="com.psl.services.DocumentServices">
@@ -29,21 +28,25 @@
 		<property name="ippService" ref="ippService" />
 		<property name="dataSource" ref="adfDataSource" />
 	</bean>
-	
+
 	<bean id="processDetailsServicesPSL" class="com.psl.services.ProcessDetailsService">
 		<property name="ippService" ref="ippService" />
 		<property name="dataSource" ref="adfDataSource" />
 	</bean>
-	
+
 	<bean id="attachDocumentServicesPSL" class="com.psl.applications.AttachDocuments">
 		<property name="ippService" ref="ippService" />
 	</bean>
-	
+
 	<bean id="schemeDocumentServicesPSL" class="com.psl.applications.SchemeDocuments">
 		<property name="ippService" ref="ippService" />
 	</bean>
-	
+
 	<bean id="deploymentServicesPSL" class="com.psl.services.DeploymentServices">
+		<property name="ippService" ref="ippService" />
+	</bean>
+
+	<bean id="processMigrationPSL" class="com.psl.applications.ProcessMigration">
 		<property name="ippService" ref="ippService" />
 	</bean>
 

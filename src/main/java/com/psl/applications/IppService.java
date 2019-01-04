@@ -57,9 +57,9 @@ public class IppService {
 	
 	static final Logger LOG = LogManager.getLogger(IppService.class);
 	private String[] activityIds;
-    private String[] processIds;
-    private HashSet<String> actIds;
-    
+	private String[] processIds;
+	private HashSet<String> actIds;
+
 	public IppService() {
 	}
 
@@ -111,24 +111,23 @@ public class IppService {
 	public void setIppUser(String ippUser) {
 		this.ippUser = ippUser;
 	}
-	
-	
+
 	public String[] getActivityIds() {
-        return activityIds;
-    }
+		return activityIds;
+	}
 
-    public void setActivityIds(String[] activityIds) {
-        this.activityIds = activityIds;
-        this.actIds = new HashSet<String>(Arrays.asList(activityIds));
-    }
-    
-    public String[] getProcessIds() {
-        return processIds;
-    }
+	public void setActivityIds(String[] activityIds) {
+		this.activityIds = activityIds;
+		this.actIds = new HashSet<String>(Arrays.asList(activityIds));
+	}
 
-    public void setProcessIds(String[] processIds) {
-        this.processIds = processIds;
-    }    
+	public String[] getProcessIds() {
+		return processIds;
+	}
+
+	public void setProcessIds(String[] processIds) {
+		this.processIds = processIds;
+	}
 
 	/**
 	 * Method to get the service factory
@@ -186,7 +185,9 @@ public class IppService {
 	}
 
 	/**
-	 * Fetches the activites details of the process based on the processOID activityIds for Scanning and Indexing process 
+	 * Fetches the activites details of the process based on the processOID
+	 * activityIds for Scanning and Indexing process
+	 * 
 	 * @param processOid
 	 * 
 	 * @return List<Map<String,String>>
@@ -203,24 +204,27 @@ public class IppService {
 
 		ActivityInstanceQuery activityQuery = ActivityInstanceQuery.findAlive();
 		activityQuery.where(new ProcessInstanceFilter(processOid));
-        
-		/*FilterOrTerm orFilter = activityQuery.getFilter().addOrTerm();
-		orFilter.add(new ProcessInstanceFilter(processOid));*/
-		
-		/*for (int x = 0; x < roleNamesArr.length; x++) {
-		   grant = roleNamesArr[x];
-		   PerformingParticipantFilter performerFilter = PerformingParticipantFilter.forModelParticipant(grant);
-		   orFilter.or(performerFilter);
-		}*/
-		
+
+		/*
+		 * FilterOrTerm orFilter = activityQuery.getFilter().addOrTerm();
+		 * orFilter.add(new ProcessInstanceFilter(processOid));
+		 */
+
+		/*
+		 * for (int x = 0; x < roleNamesArr.length; x++) { grant =
+		 * roleNamesArr[x]; PerformingParticipantFilter performerFilter =
+		 * PerformingParticipantFilter.forModelParticipant(grant);
+		 * orFilter.or(performerFilter); }
+		 */
+
 		List<ActivityInstance> activityList = getQueryService().getAllActivityInstances(activityQuery);
-		
-        boolean foundWaitActivity = false;
-        for (ActivityInstance ai : activityList) {
-            if(actIds.contains(ai.getActivity().getId())){
-            	Map<String, String> activityDetailsMap = new HashMap<String, String>();
-            	Activity activity = ai.getActivity();
-            	activityName = activity.getName();
+
+		boolean foundWaitActivity = false;
+		for (ActivityInstance ai : activityList) {
+			if (actIds.contains(ai.getActivity().getId())) {
+				Map<String, String> activityDetailsMap = new HashMap<String, String>();
+				Activity activity = ai.getActivity();
+				activityName = activity.getName();
 
 				ModelParticipant modelParticipant = activity.getDefaultPerformer();
 				modelParticipantName = (modelParticipant != null) ? modelParticipant.getName() : null;
@@ -250,18 +254,18 @@ public class IppService {
 				activityDetailsMap.put("lastModificationTime", lastModificationTime);
 
 				activitiesList.add(activityDetailsMap);
-                foundWaitActivity = true;
-                break;
-            }
-            if (foundWaitActivity) {
-                break;
-            }
-        }
-        
+				foundWaitActivity = true;
+				break;
+			}
+			if (foundWaitActivity) {
+				break;
+			}
+		}
+
 		LOG.info("Activity Details :" + activitiesList);
 		return activitiesList;
 	}
-	
+
 	/**
 	 * Fetches the documents attached to process instance, oid passed
 	 * 
@@ -716,7 +720,8 @@ public class IppService {
 
 			processDetails.put("startTime", processInstance.getStartTime().toString());
 			LOG.info("Process Details :" + processDetails);
-			if (processState != null && !(processState.getValue() == ProcessInstanceState.ACTIVE || processState.getValue() == ProcessInstanceState.INTERRUPTED)) {
+			if (processState != null && !(processState.getValue() == ProcessInstanceState.ACTIVE
+					|| processState.getValue() == ProcessInstanceState.INTERRUPTED)) {
 				processDetails.put("endTime", processInstance.getTerminationTime().toString());
 			}
 			LOG.info("Process Details :" + processDetails);
@@ -726,7 +731,8 @@ public class IppService {
 	}
 
 	/**
-	 * Fetches processes based on the data filters (Data ID) for Scanning and Indexing process search
+	 * Fetches processes based on the data filters (Data ID) for Scanning and
+	 * Indexing process search
 	 * 
 	 * @param jsonObject
 	 * @return ProcessInstances
@@ -734,53 +740,52 @@ public class IppService {
 	public ProcessInstances fetchProcessInstancesForIds(JsonObject jsonObject) {
 		ProcessInstances pis = null;
 		String completedProcesses = "";
-		completedProcesses = jsonObject.get("showCompleted") != null && !jsonObject.get("showCompleted").isJsonNull() ? jsonObject.get("showCompleted").getAsString() : "";
+		completedProcesses = jsonObject.get("showCompleted") != null && !jsonObject.get("showCompleted").isJsonNull()
+				? jsonObject.get("showCompleted").getAsString() : "";
 		ProcessInstanceQuery piQuery = null;
 
-		try{
-			if(completedProcesses.equalsIgnoreCase("Yes")){
-				ProcessInstanceState[] states = {ProcessInstanceState.Aborted, ProcessInstanceState.Completed};
+		try {
+			if (completedProcesses.equalsIgnoreCase("Yes")) {
+				ProcessInstanceState[] states = { ProcessInstanceState.Aborted, ProcessInstanceState.Completed };
 				piQuery = ProcessInstanceQuery.findInState(states);
 			} else{
 				piQuery = ProcessInstanceQuery.findAlive();
 			} 
 			
 			FilterOrTerm processIdOrTerm = piQuery.getFilter().addOrTerm();
-	        for (String processId : processIds) {
-	            processIdOrTerm.add(new ProcessDefinitionFilter(processId, false));
-	        }
-			
-			//piQuery.setPolicy(DescriptorPolicy.WITH_DESCRIPTORS);
+			for (String processId : processIds) {
+				processIdOrTerm.add(new ProcessDefinitionFilter(processId, false));
+			}
+
+			// piQuery.setPolicy(DescriptorPolicy.WITH_DESCRIPTORS);
 			Set<Map.Entry<String, JsonElement>> jsonMap = jsonObject.entrySet();
-	
+
 			for (Map.Entry<String, JsonElement> mapEntry : jsonMap) {
-	
+
 				String[] dataElement = mapEntry.getKey().split("\\.");
 				Number dataValue;
 				if (dataElement.length > 1) {
-					if(dataElement[0].equals("IndexData") && dataElement[1].equals("WorkType")){
+					if (dataElement[0].equals("IndexData") && dataElement[1].equals("WorkType")) {
 						continue;
-					}
-					else if (mapEntry.getValue().getAsJsonPrimitive().isNumber()) {
+					} else if (mapEntry.getValue().getAsJsonPrimitive().isNumber()) {
 						dataValue = mapEntry.getValue().getAsJsonPrimitive().getAsNumber();
 						if (dataValue instanceof Integer || dataValue instanceof Long) {
-							piQuery.where(
-									DataFilter.isEqual(dataElement[0], dataElement[1], mapEntry.getValue().getAsLong()));
+							piQuery.where(DataFilter.isEqual(dataElement[0], dataElement[1],
+									mapEntry.getValue().getAsLong()));
 						} else if (dataValue instanceof Float || dataValue instanceof Double) {
-							piQuery.where(
-									DataFilter.isEqual(dataElement[0], dataElement[1], mapEntry.getValue().getAsDouble()));
+							piQuery.where(DataFilter.isEqual(dataElement[0], dataElement[1],
+									mapEntry.getValue().getAsDouble()));
 						}
 					} else {
 						piQuery.where(
 								DataFilter.isEqual(dataElement[0], dataElement[1], mapEntry.getValue().getAsString()));
-	
+
 					}
-	
+
 				} else {
-					if(dataElement[0].equals("showCompleted")){
+					if (dataElement[0].equals("showCompleted")) {
 						continue;
-					}
-					else if (mapEntry.getValue().getAsJsonPrimitive().isNumber()) {
+					} else if (mapEntry.getValue().getAsJsonPrimitive().isNumber()) {
 						dataValue = mapEntry.getValue().getAsJsonPrimitive().getAsNumber();
 						if (dataValue instanceof Integer || dataValue instanceof Long) {
 							piQuery.where(DataFilter.isEqual(dataElement[0], mapEntry.getValue().getAsLong()));
@@ -792,18 +797,18 @@ public class IppService {
 					}
 				}
 			}
-	
+
 			pis = getQueryService().getAllProcessInstances(piQuery);
 			LOG.info("Process Instance fetched  - Count : " + pis.getSize());
-		}
-		catch(Exception e){
+		} catch (Exception e) {
 			LOG.info("Exception inside fetchProcessInstancesForIds while fetching process details 1" + e.getMessage());
 			LOG.info("Exception inside fetchProcessInstancesForIds while fetching process details 2" + e.getCause());
-			LOG.info("Exception inside fetchProcessInstancesForIds while fetching process details 3" + e.fillInStackTrace());
+			LOG.info("Exception inside fetchProcessInstancesForIds while fetching process details 3"
+					+ e.fillInStackTrace());
 		}
 		return pis;
 	}
-	
+
 	/**
 	 * Parses the received string and forms the JSON Object
 	 * 
@@ -1630,52 +1635,54 @@ public class IppService {
 		}
 
 		for (Map.Entry<String, String> modelData : modelDataList.entrySet()) {
-			if (modelData != null) {
+			if ((modelData.getKey() != null || modelData.getKey() != "") && (modelData.getValue() != null || modelData.getValue() != "")) {
 				modelName = modelData.getKey();
 				if (gitRepo) {
 					byteArray = modelData.getValue().getBytes();
 				} else {
 					byteArray = getBytesFromModelFile(modelData.getValue());
 				}
-				cv = new ArrayList<ConfigurationVariable>();
-				cvs = getAdministrationService().getConfigurationVariables(byteArray);
-				cv = cvs.getConfigurationVariables();
+				if(byteArray != null){
+					cv = new ArrayList<ConfigurationVariable>();
+					cvs = getAdministrationService().getConfigurationVariables(byteArray);
+					cv = cvs.getConfigurationVariables();
 
-				for (ConfigurationVariable configurationVariable : cv) {
-					configName = configurationVariable.getName();
-					configValueProp = config_prop.getProperty(modelName + "." + configName);
-					configValue = null;
-					serverConfigKey = "";
-					serverConfigValue = "";
-					if (configValueProp != null) {
-						serverConfigArr = configValueProp.split("\\*");
+					for (ConfigurationVariable configurationVariable : cv) {
+						configName = configurationVariable.getName();
+						configValueProp = config_prop.getProperty(modelName + "." + configName);
+						configValue = null;
+						serverConfigKey = "";
+						serverConfigValue = "";
+						if (configValueProp != null) {
+							serverConfigArr = configValueProp.split("\\*");
 
-						if (serverConfigArr.length > 1) {
-							serverConfigKey = serverConfigArr[0];
-							serverConfigKey = serverConfigKey.replace("Server", server);
-							serverConfigValue = configTypeMap.get(serverConfigKey);
-							configValue = serverConfigValue + serverConfigArr[1];
-						} else {
-							if (serverConfigArr[0].contains(".")) {
+							if (serverConfigArr.length > 1) {
 								serverConfigKey = serverConfigArr[0];
 								serverConfigKey = serverConfigKey.replace("Server", server);
 								serverConfigValue = configTypeMap.get(serverConfigKey);
-								configValue = serverConfigValue;
+								configValue = serverConfigValue + serverConfigArr[1];
 							} else {
-								configValue = configValueProp;
+								if (serverConfigArr[0].contains(".")) {
+									serverConfigKey = serverConfigArr[0];
+									serverConfigKey = serverConfigKey.replace("Server", server);
+									serverConfigValue = configTypeMap.get(serverConfigKey);
+									configValue = serverConfigValue;
+								} else {
+									configValue = configValueProp;
+								}
 							}
+							LOG.info("Updating the ConfigValue to = "+configValue);
+							configurationVariable.setValue(configValue);
 						}
-						LOG.info("Updating the ConfigValue to = "+configValue);
-						configurationVariable.setValue(configValue);
+
 					}
 
+					cvs.setConfigurationVariables(cv);
+					getAdministrationService().saveConfigurationVariables(cvs, true);
+
+					de = new DeploymentElement(byteArray);
+					list.add(de);
 				}
-
-				cvs.setConfigurationVariables(cv);
-				getAdministrationService().saveConfigurationVariables(cvs, true);
-
-				de = new DeploymentElement(byteArray);
-				list.add(de);
 
 			} else {
 				return null;
@@ -1742,7 +1749,10 @@ public class IppService {
 					}
 
 				}
+			}else{
+				throw new RuntimeException("The specified model file "+modelPathString+" does not exist, Please check and try again..!");
 			}
+
 
 			return byteArray;
 		}
@@ -1846,7 +1856,9 @@ public class IppService {
 
 		if (!filenamesExists) {
 			for (File file : dir.listFiles()) {
-				fileNames = fileNames + file.getName() + ",";
+				if(file.getName().endsWith(".xpdl")){
+					fileNames = fileNames + file.getName() + ",";
+				}
 			}
 			fileNames = fileNames.substring(0, fileNames.length() - 1);
 		}
@@ -1928,7 +1940,7 @@ public class IppService {
 	 * @param to
 	 * @return
 	 */
-	public void changeStatus(long processOid, int from, int to, String activityId){
+	public void changeStatus(long processOid, int from, int to, String activityId) {
 
 		ActivityInstanceQuery query = new ActivityInstanceQuery();
 		query = ActivityInstanceQuery.findForProcessInstance(processOid);
@@ -1937,9 +1949,10 @@ public class IppService {
 			ActivityInstanceState state = activityInstance.getState();
 			LOG.info("state: " + state);
 			ActivityInstanceState fromState = ActivityInstanceState.getState(from);
-			LOG.info("fromState: "+fromState);
+			LOG.info("fromState: " + fromState);
 			String currentActivityId = activityInstance.getActivity().getId();
-			if(state.equals(fromState) && activityInstance.getActivity().isInteractive() && currentActivityId.equals(activityId)){
+			if (state.equals(fromState) && activityInstance.getActivity().isInteractive()
+					&& currentActivityId.equals(activityId)) {
 				long activityOid = activityInstance.getOID();
 				LOG.info(activityOid);
 
@@ -2108,140 +2121,6 @@ public class IppService {
 
 	}
 
-	/**
-	 * Method called in Process Migration Process to abort the existing instance
-	 * and return the document details of the documents that were attached to
-	 * the case
-	 * 
-	 * @param processDetail
-	 *            Details of the process to be aborted
-	 * @param hierarchy
-	 *            hierarchy for aborting the process
-	 * @return
-	 */
-	public String abortActiveProcess(Map processDetail, String hierarchy) {
-		LOG.info(processDetail);
-		String txtOutput = null;
-		long processOID = Long.parseLong(processDetail.get("processInstanceOID").toString());
-		JsonObject result = new JsonObject();
-		String processState = null;
-		ProcessInstance pi = null;
-
-		try {
-			pi = getWorkflowService().getProcessInstance(processOID);
-			processState = pi.getState().getName();
-			result = abortProcess(hierarchy, processOID, processState);
-			if (result.get("aborted").getAsBoolean()) {
-				if (processDetail.get("action").toString().equalsIgnoreCase("re-trigger")) {
-					JsonArray responseArray = new JsonArray();
-					List<Document> docList = getAttachedDocuments(processOID);
-					responseArray = getDocumentDetailsObject(docList);
-					result.add("documents", responseArray);
-				}
-			}
-		} catch (Exception e) {
-			LOG.info("Inside abortActiveProcess - Cannot abort process for process OID : " + processOID + "\n"
-					+ e.getCause());
-			LOG.info("Inside abortActiveProcess - Cannot abort process for process OID : " + processOID + "\n"
-					+ e.getMessage());
-			LOG.info("Inside abortActiveProcess - Cannot abort process for process OID : " + processOID + "\n"
-					+ e.getStackTrace());
-			result.addProperty("processOid", processOID);
-			result.addProperty("aborted", "false");
-		}
-		txtOutput = result.toString();
-		LOG.info("Inside abortActiveProcess - Process Details : " + txtOutput);
-		return txtOutput;
-	}
-
-	/**
-	 * 
-	 * @param docList
-	 *            Returns the JSON Object of the documents attached in the
-	 *            existing case
-	 * @return
-	 */
-	public JsonArray getDocumentDetailsObject(List<Document> docList) {
-		JsonArray responseArray = new JsonArray();
-		JsonObject responseObject;
-		String txtDocType = "Other";
-		for (Document document : docList) {
-
-			responseObject = new JsonObject();
-			responseObject.addProperty("name", document.getName());
-			responseObject.addProperty("creationTimestamp", document.getDateCreated().getTime());
-			responseObject.addProperty("contentType", document.getContentType());
-			responseObject.addProperty("path", document.getPath());
-			responseObject.addProperty("uuid", document.getId());
-			responseObject.addProperty("numPages", 0);
-
-			// Parse document to String
-			txtDocType = getDocumentTypeString(document);
-			JsonObject docType = new JsonObject();
-			docType.addProperty("name", txtDocType);
-			responseObject.add("documentType", docType);
-
-			responseObject.addProperty("pageCount", 0);
-			// Commented as not a mandatory parameter
-			// responseObject.addProperty("url",
-			// ApplicationConstants.URL_STRING.getValue() + document.getId());
-			responseObject.addProperty("pages", "[]");
-
-			responseArray.add(responseObject);
-		}
-		return responseArray;
-	}
-
-	/**
-	 * Method used in Process Migration Process to parse the CSV file which has
-	 * the details of the process to be migrated
-	 * 
-	 * @param path
-	 *            Path of the file where it is stored
-	 * @return
-	 */
-	public Map parseCSV(String path) {
-
-		LOG.info(path);
-		Map processDetails = new HashMap();
-		Map csvData = null;
-		List<Map> processList = new ArrayList();
-		int i = 0;
-		int j = 0;
-		String[] keyArr = ApplicationConstants.EXCEL_DUMP_KEYS.getValue().split(",");
-		try {
-			File file = new File(path);
-			LOG.info("Inside parseCSV : " + file);
-			FileReader fr = new FileReader(file);
-			BufferedReader br = new BufferedReader(fr);
-			String line = "";
-			String[] tempArr;
-			while ((line = br.readLine()) != null) {
-				LOG.info("Inside parseCSV : " + line);
-				if (i == 0) {
-					i++;
-					continue;
-				}
-				csvData = new HashMap();
-				tempArr = line.split(",");
-				for (j = 0; j < keyArr.length; j++) {
-					csvData.put(keyArr[j], tempArr[j]);
-				}
-				processList.add(csvData);
-			}
-			br.close();
-			processDetails.put("processInstance", processList);
-		} catch (Exception e) {
-			LOG.info("Error in Parsing CSV -- " + e.getCause());
-			LOG.info("Error in Parsing CSV -- " + e.getMessage());
-			LOG.info("Error in Parsing CSV -- " + e.getStackTrace());
-
-		}
-
-		return processDetails;
-
-	}
-
 	public String createCSV(String txtCSV) {
 		Date currentDate = new Date();
 		String fileName = ApplicationConstants.EXCEL_DUMP_NAME.getValue() + currentDate.getTime();
@@ -2279,6 +2158,7 @@ public class IppService {
 		}
 		return result;
 	}
+
 	
 	/**
 	 * Populate data for split and merge of documents for new Scanning n Indexing
@@ -2581,7 +2461,5 @@ public class IppService {
 		return jcrId;
 	}
 
-	
-	
-
 }
+
