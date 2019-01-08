@@ -2450,6 +2450,7 @@ public class IppService {
 		
 		Map<String,Object> metaDataMap = this.populateDocumentProperties(schemeNo,memberNo,workType,docType);
 		fileName = fileName + ".pdf";
+		fileName=fileName.replaceAll("[\\\\|?:\"<>\\/*]+","_");
 		String contentType = URLConnection.guessContentTypeFromName(fileName);
 		
 		
