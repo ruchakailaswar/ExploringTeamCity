@@ -1945,15 +1945,19 @@ public class IppService {
 		ActivityInstanceQuery query = new ActivityInstanceQuery();
 		query = ActivityInstanceQuery.findForProcessInstance(processOid);
 		ActivityInstances instances = getQueryService().getAllActivityInstances(query);
+		ActivityInstanceState state;
+		ActivityInstanceState fromState;
+		String currentActivityId ;
+		long activityOid ;
 		for (ActivityInstance activityInstance : instances) {
-			ActivityInstanceState state = activityInstance.getState();
+			state = activityInstance.getState();
 			LOG.info("state: " + state);
-			ActivityInstanceState fromState = ActivityInstanceState.getState(from);
+			fromState = ActivityInstanceState.getState(from);
 			LOG.info("fromState: " + fromState);
-			String currentActivityId = activityInstance.getActivity().getId();
-			if (state.equals(fromState) && activityInstance.getActivity().isInteractive()
+			currentActivityId = activityInstance.getActivity().getId();
+			if ((state.equals(fromState) || state.equals(ActivityInstanceState.APPLICATION)) && activityInstance.getActivity().isInteractive()
 					&& currentActivityId.equals(activityId)) {
-				long activityOid = activityInstance.getOID();
+				activityOid = activityInstance.getOID();
 				LOG.info(activityOid);
 
 				switch (to) {
