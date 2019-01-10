@@ -183,61 +183,70 @@ public class DeploymentServices {
 			LOG.info("Deploy Model REST API : Exception in deployModel -- " + e.getStackTrace());
 			LOG.info("Deploy Model REST API : Exception in deployModel -- " + e.getCause());
 			return Response.status(400)
-					.entity("{\"response\":\"Could not get the model files for deployment.. Please check and try again..!!\"}")
+					.entity("{\"response\":\"Something went wrong while deploying the model files.. Please check and try again..!!\"}")
 					.build();
 			
 		}
 
-		if (info != null) {
-			for (DeploymentInfo deploymentInfo : info) {
-				if (deploymentInfo.hasErrors()) {
-					isFailure = true;
-					break;
-
-				}
-			}
-
-			if (isFailure) {
-				response.addProperty("result", "Failure");
+		try {
+			if (info != null) {
 				for (DeploymentInfo deploymentInfo : info) {
-					if (deploymentInfo.hasErrors() || deploymentInfo.hasWarnings()) {
-						modelId = deploymentInfo.getId();
-						error_warnings = new JsonObject();
-						error_warnings.addProperty("Errors", (String) deploymentInfo.getErrors().toString());
-						error_warnings.addProperty("Warnings", (String) deploymentInfo.getWarnings().toString());
-						response.add(modelId, error_warnings);
+					if (deploymentInfo.hasErrors()) {
+						isFailure = true;
+						break;
 
 					}
 				}
-			} else {
-				response.addProperty("result", "Successfully Deployed Models");
-				for (DeploymentInfo deploymentInfo : info) {
-					if (deploymentInfo.hasWarnings()) {
-						modelId = deploymentInfo.getId();
-						warnings = new JsonObject();
-						warnings.addProperty("Warnings", (String) deploymentInfo.getWarnings().toString());
-						LOG.warn(warnings);
-						response.add(modelId, warnings);
-						LOG.info(response);
 
+				if (isFailure) {
+					response.addProperty("result", "Failure");
+					for (DeploymentInfo deploymentInfo : info) {
+						if (deploymentInfo.hasErrors() || deploymentInfo.hasWarnings()) {
+							modelId = deploymentInfo.getId();
+							error_warnings = new JsonObject();
+							error_warnings.addProperty("Errors", (String) deploymentInfo.getErrors().toString());
+							error_warnings.addProperty("Warnings", (String) deploymentInfo.getWarnings().toString());
+							response.add(modelId, error_warnings);
+
+						}
+					}
+				} else {
+					response.addProperty("result", "Successfully Deployed Models");
+					for (DeploymentInfo deploymentInfo : info) {
+						if (deploymentInfo.hasWarnings()) {
+							modelId = deploymentInfo.getId();
+							warnings = new JsonObject();
+							warnings.addProperty("Warnings", (String) deploymentInfo.getWarnings().toString());
+							LOG.warn(warnings);
+							response.add(modelId, warnings);
+							LOG.info(response);
+
+						}
 					}
 				}
-			}
 
-			outer.add("response", response);
+				outer.add("response", response);
 
-			if (isFailure) {
-				responseObj = Response.serverError().status(500).entity(outer.toString()).build();
-				
+				if (isFailure) {
+					responseObj = Response.serverError().status(500).entity(outer.toString()).build();
+
+				} else {
+					responseObj = Response.ok(outer.toString(), MediaType.APPLICATION_JSON).status(200).build();
+
+				}
 			} else {
-				responseObj = Response.ok(outer.toString(), MediaType.APPLICATION_JSON).status(200).build();
-
+				String failedMessage = "{\"response\":\"Something went wrong. Please try again!.\"}";
+				responseObj = Response.status(500).entity(failedMessage).build();
 			}
-		} else {
-			String failedMessage = "{\"response\":\"Something went wrong. Please try again!.\"}";
-			responseObj = Response.status(500).entity(failedMessage).build();
+			return responseObj;
+		} catch (Exception e) {
+			LOG.info("Deploy Model REST API : Exception in deployModel -- " + e);
+			LOG.info("Deploy Model REST API : Exception in deployModel -- " + e.getStackTrace());
+			LOG.info("Deploy Model REST API : Exception in deployModel -- " + e.getCause());
+			return Response.status(400)
+					.entity("{\"response\":\"Execption while creating structured deployment response... Please verify and try again...!!\"}")
+					.build();
 		}
-		return responseObj;
 	}
 	
 
