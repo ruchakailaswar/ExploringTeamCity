@@ -1955,7 +1955,7 @@ public class IppService {
 			fromState = ActivityInstanceState.getState(from);
 			LOG.info("fromState: " + fromState);
 			currentActivityId = activityInstance.getActivity().getId();
-			if ((state.equals(fromState) || state.equals(ActivityInstanceState.APPLICATION)) && activityInstance.getActivity().isInteractive()
+			if ((state.equals(fromState) || state.equals(ActivityInstanceState.Application)) && activityInstance.getActivity().isInteractive()
 					&& currentActivityId.equals(activityId)) {
 				activityOid = activityInstance.getOID();
 				LOG.info(activityOid);
@@ -1963,15 +1963,19 @@ public class IppService {
 				switch (to) {
 				case 1:
 					getWorkflowService().activate(activityOid);
+					LOG.info("Activity Activated");
 					break;
 				case 5:
 					getWorkflowService().suspend(activityOid, null);
+					LOG.info("Activity Suspended");
 					break;
 				case 7:
 					getWorkflowService().hibernate(activityOid);
+					LOG.info("Activity Hibernated");
 					break;
 				default:
 					getWorkflowService().suspend(activityOid, null);
+					LOG.info("Activity Suspended");
 					break;
 				}
 			}
