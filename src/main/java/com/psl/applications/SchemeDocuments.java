@@ -66,7 +66,6 @@ public class SchemeDocuments {
 		List<Document> docsList = null;
 		Properties prop = null;
 		InputStream is = null;
-		String eligibleForSchemeDocs = null;
 		List<Document> processAttachments = null;
 		WorkflowService ws = null;
 		if (ippService == null) {

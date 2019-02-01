@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.stardust.common.error.AccessForbiddenException;
 import org.eclipse.stardust.common.error.ObjectNotFoundException;
 import org.eclipse.stardust.common.log.LogManager;
 import org.eclipse.stardust.common.log.Logger;
@@ -103,7 +104,8 @@ public class ProcessMigration {
 	 *            hierarchy for aborting the process
 	 * @return
 	 */
-	public Map abortActiveProcess(Map<String, List> processDetail, String hierarchy, String username, String password) {
+	public Map abortActiveProcess(Map<String, List> processDetail, String hierarchy, String username, String password,
+			long currentProcessOID) {
 
 		LOG.info("Inside abortActiveProcess, starting user : " + username);
 		LOG.info("Inside abortActiveProcess : " + processDetail);
@@ -124,24 +126,26 @@ public class ProcessMigration {
 
 				if (csvData.get("processInstanceOID") != null) {
 					processOID = Long.parseLong(csvData.get("processInstanceOID").toString());
-					pi = wf.getProcessInstance(processOID);
-					processState = pi.getState().getName();
-					result = abortProcess(hierarchy, processOID, processState, wf);
-					if (result) {
-						if (csvData.get("action").toString().equalsIgnoreCase("re-trigger")) {
-							responseArray = new JsonArray();
-							List<Document> docList = ippService.getAttachedDocuments(processOID);
-							responseArray = getDocumentDetailsObject(docList);
-							if (responseArray != null) {
-								docDetails = new JsonObject();
-								docDetails.add("documents", responseArray);
-								csvData.put("indexingRequestDetails", docDetails.toString());
-							}
+					if (processOID < currentProcessOID) {
+						pi = wf.getProcessInstance(processOID);
+						processState = pi.getState().getName();
+						result = abortProcess(hierarchy, processOID, processState, wf);
+						if (result) {
+							if (csvData.get("action").toString().equalsIgnoreCase("re-trigger")) {
+								responseArray = new JsonArray();
+								List<Document> docList = ippService.getAttachedDocuments(processOID);
+								responseArray = getDocumentDetailsObject(docList);
+								if (responseArray != null) {
+									docDetails = new JsonObject();
+									docDetails.add("documents", responseArray);
+									csvData.put("indexingRequestDetails", docDetails.toString());
+								}
 
+							}
 						}
 					}
 				}
-			} catch (Exception e) {
+			} catch (ObjectNotFoundException e) {
 				LOG.info("Inside abortActiveProcess - Cannot abort process for process OID : " + processOID + "\n"
 						+ e.getCause());
 				LOG.info("Inside abortActiveProcess - Cannot abort process for process OID : " + processOID + "\n"
@@ -221,14 +225,20 @@ public class ProcessMigration {
 				}
 
 			}
-		} catch (Exception e) {
+		} catch (ObjectNotFoundException e) {
 			isAborted = false;
 			LOG.info("Cannot Abort Process for Process OID : " + processInstanceOID);
 			LOG.info("Cannot Abort Process for Process OID : " + e.getCause());
 			LOG.info("Cannot Abort Process for Process OID : " + e.getMessage());
 			LOG.info("Cannot Abort Process for Process OID : " + e.getStackTrace());
-		}
-		return isAborted;
+		} catch (AccessForbiddenException e) {
+			isAborted = false;
+			LOG.info("Cannot Abort Process for Process OID : " + processInstanceOID);
+			LOG.info("Cannot Abort Process for Process OID : " + e.getCause());
+			LOG.info("Cannot Abort Process for Process OID : " + e.getMessage());
+			LOG.info("Cannot Abort Process for Process OID : " + e.getStackTrace());
+		} 
+			return isAborted;
 	}
 
 }

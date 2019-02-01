@@ -5,6 +5,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -14,7 +15,10 @@ import javax.ws.rs.core.Response;
 
 import org.eclipse.stardust.common.log.LogManager;
 import org.eclipse.stardust.common.log.Logger;
+import org.eclipse.stardust.engine.api.query.DeployedModelQuery;
+import org.eclipse.stardust.engine.api.runtime.DeployedModelDescription;
 import org.eclipse.stardust.engine.api.runtime.DeploymentInfo;
+import org.eclipse.stardust.engine.api.runtime.Models;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -51,7 +55,6 @@ public class DeploymentServices {
 	@Consumes({ "application/json" })
 	@Produces({ "application/json" })
 	public Response downloadModel(@PathParam("oid") String modelOid, String input) {
-		//
 
 		String path = null;
 		String output = "{\"response\":\"NotFound\"}";
@@ -99,6 +102,110 @@ public class DeploymentServices {
 		return Response.status(500).entity(output).build();
 
 	}
+	
+	
+	/**
+	 * Get the current Model OID's for the specified model Id's
+	 * 
+	 * @param input
+	 * @return
+	 */
+	@POST
+	@Path("getModelOids")
+	@Consumes({ "application/json" })
+	@Produces({ "application/json" })
+	public Response getModelOids(String input){
+		Response responseObj = null;
+		JsonObject jsonObject;
+		String fileNames ="";
+		String[] fileNameArr = null;
+		LOG.info("Fetching of ModelOid for the Model Id's : Started "+ input);
+		try
+		{
+			jsonObject = ippService.parseJSONObject(input);
+			if (jsonObject.get(ApplicationConstants.FILENAME_PARAM.getValue()) != null) {
+				fileNames = jsonObject.get(ApplicationConstants.FILENAME_PARAM.getValue()).getAsString();
+			}
+			else{
+				return Response.status(400).entity("{\"response\":\"'fileNames' parameter missing in request body.\"}").build();
+			}
+			fileNameArr = fileNames.split(",");
+			Map<String,Integer> modelOidDetails = ippService.fetchModelOidFromModelIds(fileNameArr);
+			responseObj = Response.ok(modelOidDetails.toString(), MediaType.APPLICATION_JSON_TYPE).status(200).build();
+			
+		}
+		catch(Exception e)
+		{
+			LOG.info("Get Model OID's REST API : Exception in geModelOids -- " + e);
+			LOG.info("Get Model OID's REST API : Exception in geModelOids -- " + e.getStackTrace());
+			LOG.info("Get Model OID's REST API : Exception in geModelOids -- " + e.getCause());
+			return Response.status(400)
+					.entity("{\"response\":\"Something went wrong while fetching the model OID's.. Please check and try again..!!\"}")
+					.build();
+		}
+		
+		return responseObj;
+	}
+	
+	
+	/**
+	 * Manipulate the daemons for automated deployment 
+	 * 
+	 * @param input
+	 * @return
+	 */
+	@POST
+	@Path("manipulateDaemons")
+	@Consumes({ "application/json" })
+	@Produces({ "application/json" })
+	public Response manipulateDaemons(String input){
+		Response responseObj = null;
+		JsonObject jsonObject;
+		String state;
+		String daemonTypesString ="";
+		List<String> manipulatedDaemonTypes = new ArrayList<String>();
+		LOG.info("Manipulating the Daemons : Started "+ input);
+		try{
+			
+			jsonObject = ippService.parseJSONObject(input);
+			if(jsonObject.get("state") != null){
+				state = jsonObject.get("state").getAsString();
+				if(state.equalsIgnoreCase("start")){
+					if(jsonObject.get("daemonTypes") != null){
+						daemonTypesString = jsonObject.get("daemonTypes").getAsString();
+					}
+					else{
+						return Response.status(400).entity("{\"response\":\"'daemonTypes' parameter missing in request body.\"}").build();
+					}
+				}
+			}
+			else{
+				return Response.status(400).entity("{\"response\":\"'state' parameter missing in request body.\"}").build();
+			}
+			
+			manipulatedDaemonTypes = ippService.startStopDaemons(state, daemonTypesString);
+			responseObj = Response.ok(manipulatedDaemonTypes.toString(), MediaType.APPLICATION_JSON_TYPE).status(200).build();
+			
+		}catch(Exception e)
+		{
+			LOG.info("Manipulating the Daemons REST API : Exception in manipulateDaemons -- " + e);
+			LOG.info("Manipulating the Daemons REST API : Exception in manipulateDaemons -- " + e.getStackTrace());
+			LOG.info("Manipulating the Daemons REST API : Exception in manipulateDaemons -- " + e.getCause());
+			return Response.status(400)
+					.entity("{\"response\":\"Something went wrong while manipulating the Daemons.. Please check and try again..!!\"}")
+					.build();
+		}
+		
+		
+		return responseObj;
+	}
+	
+	
+	
+	
+	
+	
+	
 
 	/**
 	 * Deploys the model from GIT Repository or Local File/Folder Location based
@@ -147,12 +254,18 @@ public class DeploymentServices {
 
 					filenamesExists = true;
 					jsonObject.remove(ApplicationConstants.FILENAME_PARAM.getValue());
+				}else{
+					LOG.info("Missing parameter 'fileNames' in the request body");
+					return Response.status(400).entity("{\"response\":\"'fileNames' parameter missing in request body.\"}").build();
+					
 				}
 
 				if (!gitRepo) {
 					dir = new File(path);
 					if (!dir.isDirectory()) {
-						return Response.status(500).entity(ApplicationConstants.INVALID_PATH_ERROR.getValue()).build();
+						LOG.info("Invalid path or inaccessible location : "+path);
+						return Response.status(400).entity(ApplicationConstants.INVALID_PATH_ERROR.getValue()).build();
+					
 					}
 					completeData = ippService.getFilesFromDirectory(path, dir, filenamesExists, fileNames);
 				} else {
@@ -162,7 +275,9 @@ public class DeploymentServices {
 				jsonObject.remove(ApplicationConstants.PATH_PARAM.getValue());
 
 			} else {
+				LOG.info("Missing parameter 'path' in the request body");
 				return Response.status(400).entity(ApplicationConstants.PATH_ERROR.getValue()).build();
+				
 			}
 
 			if (completeData != null && completeData.size() > 0) {
@@ -171,7 +286,7 @@ public class DeploymentServices {
 				}
 				info = this.ippService.changeConfigVariablesandDeployModel(completeData, jsonObject, gitRepo);
 			} else {
-				LOG.info("Inside else");
+				LOG.info("Could not get the model files for deployment..");
 				return Response.status(400)
 						.entity("{\"response\":\"Could not get the model files for deployment.. Please check and try again..!!\"}")
 						.build();

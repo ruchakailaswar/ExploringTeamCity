@@ -33,7 +33,7 @@ public class AttachDocuments {
 	
 
 /**
- * Attaches the all claims documents to IFP - New Business Process and Switch Form to the Switches & Election Process
+ * Attaches all the claims documents to IFP - New Business Process and Switch Form to the Switches & Election Process
  * @param sourceProcessOID process OID of the (source)Claims or IFP - NB Process
  * @param targetProcessOID process OID of the (target)IFP - NB or Switch Process
  * @param workType Switch or Claims

@@ -50,11 +50,10 @@ import com.sun.media.jai.codec.ImageDecoder;
 public class IppService {
 
 	private ServiceFactory serviceFactory;
-	
 
 	private String ippPassword;
 	private String ippUser;
-	
+
 	static final Logger LOG = LogManager.getLogger(IppService.class);
 	private String[] activityIds;
 	private String[] processIds;
@@ -81,7 +80,7 @@ public class IppService {
 
 	public DocumentManagementService getDocumentManagementService() {
 		return getServiceFactory().getDocumentManagementService();
-	
+
 	}
 
 	/**
@@ -94,7 +93,6 @@ public class IppService {
 		return getServiceFactory().getAdministrationService();
 
 	}
-
 
 	public String getIppPassword() {
 		return ippPassword;
@@ -192,77 +190,22 @@ public class IppService {
 	 * 
 	 * @return List<Map<String,String>>
 	 */
-	public List<Map<String, String>> getActivitiesDetailsForIndexing(long processOid) {
+	public List<ActivityInstance> getActivitiesDetailsForIndexing(long processOid) {
 
-		String activityName = null;
-		String modelParticipantName = null;
-		String activityState = null;
-		String startTime = null;
-		String lastModificationTime = null;
-		String userName = null;
-		List<Map<String, String>> activitiesList = new ArrayList<Map<String, String>>();
+		LOG.info("Inside getActivitiesDetailsForIndexing" + processOid);
 
 		ActivityInstanceQuery activityQuery = ActivityInstanceQuery.findAlive();
 		activityQuery.where(new ProcessInstanceFilter(processOid));
-
-		/*
-		 * FilterOrTerm orFilter = activityQuery.getFilter().addOrTerm();
-		 * orFilter.add(new ProcessInstanceFilter(processOid));
-		 */
-
-		/*
-		 * for (int x = 0; x < roleNamesArr.length; x++) { grant =
-		 * roleNamesArr[x]; PerformingParticipantFilter performerFilter =
-		 * PerformingParticipantFilter.forModelParticipant(grant);
-		 * orFilter.or(performerFilter); }
-		 */
-
 		List<ActivityInstance> activityList = getQueryService().getAllActivityInstances(activityQuery);
+		List<ActivityInstance> activitiesList = new ArrayList<ActivityInstance>();
 
-		boolean foundWaitActivity = false;
 		for (ActivityInstance ai : activityList) {
 			if (actIds.contains(ai.getActivity().getId())) {
-				Map<String, String> activityDetailsMap = new HashMap<String, String>();
-				Activity activity = ai.getActivity();
-				activityName = activity.getName();
-
-				ModelParticipant modelParticipant = activity.getDefaultPerformer();
-				modelParticipantName = (modelParticipant != null) ? modelParticipant.getName() : null;
-
-				UserInfo userInfo = ai.getPerformedBy();
-				userName = (userInfo != null) ? userInfo.getFirstName() + " " + userInfo.getLastName() : null;
-
-				ActivityInstanceState state = ai.getState();
-				if (state != null) {
-					activityState = state.getName();
-				}
-
-				if (ai.getStartTime() != null) {
-					startTime = ai.getStartTime().toString();
-
-				}
-				if (ai.getLastModificationTime() != null) {
-					lastModificationTime = ai.getLastModificationTime().toString();
-				}
-
-				activityDetailsMap.put("activityInstanceOid", Long.toString(ai.getOID()));
-				activityDetailsMap.put("activityName", activityName);
-				activityDetailsMap.put("modelParticipant", modelParticipantName);
-				activityDetailsMap.put("performedBy", userName);
-				activityDetailsMap.put("state", activityState);
-				activityDetailsMap.put("startTime", startTime);
-				activityDetailsMap.put("lastModificationTime", lastModificationTime);
-
-				activitiesList.add(activityDetailsMap);
-				foundWaitActivity = true;
-				break;
-			}
-			if (foundWaitActivity) {
-				break;
+				activitiesList.add(ai);
+				LOG.info("Inside getActivitiesDetailsForIndexing,Activity ID : " + ai.getActivity().getName() + " - "
+						+ ai.getOID());
 			}
 		}
-
-		LOG.info("Activity Details :" + activitiesList);
 		return activitiesList;
 	}
 
@@ -325,22 +268,22 @@ public class IppService {
 
 			String docTypesStr = "";
 			String dt = "";
-			for(Document doc : originalDocsList) {
-				if(doc.getProperty("DocumentType") != null) {
+			for (Document doc : originalDocsList) {
+				if (doc.getProperty("DocumentType") != null) {
 					List<String> docTypes = (List) doc.getProperty("DocumentType");
-					
-					dt = getCSVS(docTypes); 
+
+					dt = getCSVS(docTypes);
 					dt = dt != null && dt.equalsIgnoreCase("null") ? "" : dt;
-					
-					if(dt.isEmpty())
+
+					if (dt.isEmpty())
 						continue;
-					
-					if(docTypesStr.isEmpty())
+
+					if (docTypesStr.isEmpty())
 						docTypesStr = StringUtils.join(docTypes.iterator(), ",");
 					else
 						docTypesStr = docTypesStr + "," + StringUtils.join(docTypes.iterator(), ",");
 				}
-			} 
+			}
 
 			mainObj.addProperty("docTypesList", docTypesStr);
 		} catch (Exception e) {
@@ -554,7 +497,8 @@ public class IppService {
 		if (props != null && props.size() > 0) {
 			docTypes = (List<String>) props.get("DocumentType");
 		}
-		String dt = getCSVS(docTypes); ;
+		String dt = getCSVS(docTypes);
+		;
 		dt = dt != null && dt.equalsIgnoreCase("null") ? "" : dt;
 		return dt;
 	}
@@ -730,6 +674,89 @@ public class IppService {
 		return processDetails;
 	}
 
+	public List<ProcessInstance> fetchProcessByProcessOID(JsonObject jsonObject) {
+
+		long processInstanceOID = 0l;
+		boolean completedProcesses;
+		ProcessInstance processInstance;
+		List<ProcessInstance> instanceList = null;
+		String dataPathValue = null;
+		String processState = "";
+		String searchValue = "";
+		String firstName,lastName = "";
+		boolean isMatchFound = true;
+		String[] dataIDsArray = ApplicationConstants.DATAPATHLIST.getValue().split(",");
+
+		completedProcesses = jsonObject.get("showCompleted") != null && !jsonObject.get("showCompleted").isJsonNull()
+				? jsonObject.get("showCompleted").getAsBoolean() : false;
+
+		processInstanceOID = jsonObject.get("ProcessOid").getAsLong();
+		processInstance = getWorkflowService().getProcessInstance(processInstanceOID);
+		processState = processInstance.getState().getName();
+
+		if (completedProcesses
+				&& (processState.equals(ProcessInstanceState.Aborted.toString())
+						|| processState.equals(ProcessInstanceState.Completed.toString()))
+				|| (!completedProcesses && processState.equals(ProcessInstanceState.Active.toString())
+						|| processState.equals(ProcessInstanceState.Aborting.toString())
+						|| processState.equals(ProcessInstanceState.Created.toString()))) {
+			LOG.info(isMatchFound);
+			for (String dataID : dataIDsArray) {
+				try {
+					if (isMatchFound) {
+						if (jsonObject.get(dataID) != null && !jsonObject.get(dataID).isJsonNull()) {
+
+							searchValue = jsonObject.get(dataID).getAsString().toLowerCase();
+							dataPathValue = (String) getProcessData(processInstanceOID, dataID).toString()
+									.toLowerCase();
+							isMatchFound = searchValue.equals(dataPathValue.toString()) ? true : false;
+
+						} else if (dataID.equals(ApplicationConstants.META_DATA_MEMBER_NAME.toString())) {
+							String[] memberIDArray = ApplicationConstants.META_DATA_MEMBER_NAME.getValue().split(",");
+
+							firstName = (jsonObject.get(memberIDArray[1]) != null
+									&& !jsonObject.get(memberIDArray[1]).isJsonNull())
+											? jsonObject.get(memberIDArray[1]).getAsString().toLowerCase() : null;
+
+							lastName = (jsonObject.get(memberIDArray[2]) != null
+									&& !jsonObject.get(memberIDArray[2]).isJsonNull())
+											? jsonObject.get(memberIDArray[2]).getAsString().toLowerCase() : null;
+
+							if ((firstName != null && !firstName.isEmpty())
+									|| (lastName != null && !lastName.isEmpty())) {
+
+								dataPathValue = (String) getProcessData(processInstanceOID, memberIDArray[0]).toString()
+										.toLowerCase();
+
+								if (lastName != null && firstName != null) {
+									isMatchFound = (dataPathValue.contains(firstName)
+											&& dataPathValue.contains(lastName)) ? true : false;
+								} else if (firstName != null & lastName == null) {
+									isMatchFound = dataPathValue.contains(firstName) ? true : false;
+								} else if (firstName == null & lastName != null) {
+									isMatchFound = dataPathValue.contains(lastName) ? true : false;
+								}
+							}
+						}
+					} else {
+						break;
+					}
+				} catch (ObjectNotFoundException e) {
+					LOG.warn("Could not find Data Path " + dataID + " on scope process Instance " + processInstanceOID);
+				} catch (InvalidValueException e) {
+					LOG.warn("Could not get data for Data Path " + dataID + " on scope process Instance "
+							+ processInstanceOID);
+				}
+			}
+			if (isMatchFound) {
+				instanceList = new ArrayList<ProcessInstance>();
+				instanceList.add(processInstance);
+			}
+		}
+		return instanceList;
+
+	}
+
 	/**
 	 * Fetches processes based on the data filters (Data ID) for Scanning and
 	 * Indexing process search
@@ -748,10 +775,9 @@ public class IppService {
 			if (completedProcesses.equalsIgnoreCase("Yes")) {
 				ProcessInstanceState[] states = { ProcessInstanceState.Aborted, ProcessInstanceState.Completed };
 				piQuery = ProcessInstanceQuery.findInState(states);
-			} else{
-				piQuery = ProcessInstanceQuery.findAlive();
-			} 
-			
+			} else {
+				piQuery = ProcessInstanceQuery.findAll();
+			}
 			FilterOrTerm processIdOrTerm = piQuery.getFilter().addOrTerm();
 			for (String processId : processIds) {
 				processIdOrTerm.add(new ProcessDefinitionFilter(processId, false));
@@ -892,7 +918,7 @@ public class IppService {
 		}
 		LOG.info("Added document with new document type as : document types " + document.getDocumentType());
 		LOG.info("Added Document properties  : " + document.getProperties());
-	
+
 		LOG.info("Setting process attachments : List of attachments " + attachments);
 
 		setProcessData(processOid, ApplicationConstants.PROCESS_ATTACHMENTS.getValue(), attachments);
@@ -1402,14 +1428,13 @@ public class IppService {
 			row.createCell(10).setCellValue(process.get("lastModificationTime"));
 		}
 
-		
 		File file = new File("Interrupted-Activities.xlsx");
 		FileOutputStream fileOut = new FileOutputStream(file);
 		workbook.write(fileOut);
 
 		fileOut.close();
 		return file;
-	
+
 	}
 
 	/**
@@ -1458,10 +1483,10 @@ public class IppService {
 
 					// No of pages to iterate on
 					int numberOfPages = TiffImage.getNumberOfPages(myTiffFile);
-					
+
 					writer.setStrictImageSequence(true);
 					document.open();
-					
+
 					LOG.info("Coverting Doc from TIF to PDF with JCR UID: " + doc.getId());
 					for (int i = 1; i <= numberOfPages; i++) {
 						Image tempImage = TiffImage.getTiffImage(myTiffFile, i);
@@ -1478,8 +1503,8 @@ public class IppService {
 						document.newPage();
 						document.add(tempImage);
 					}
-						document.close();
-						outfile.flush();
+					document.close();
+					outfile.flush();
 
 					// Converting the extension to PDF
 					String name = doc.getName();
@@ -1601,8 +1626,8 @@ public class IppService {
 		String elementName = "";
 		Properties server_prop = null;
 		Properties config_prop = null;
-		List<ConfigurationVariable> cv ;
-		ConfigurationVariables cvs ;
+		List<ConfigurationVariable> cv;
+		ConfigurationVariables cvs;
 		String configName;
 		String configValueProp;
 		String configValue;
@@ -1614,88 +1639,100 @@ public class IppService {
 		String c_key;
 		String c_value;
 
-
-		for (Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-			elementName = entry.getKey();
-			if (elementName.equalsIgnoreCase("server")) {
-				server = entry.getValue().getAsString().toUpperCase();
-			}
-		}
-		server_prop = readPropertiesFile("server-details-map.properties");
-		config_prop = readPropertiesFile("configvariable-map.properties");
-
-		String configType = server_prop.getProperty(server);
-		String[] configTypeArr = configType.split(",");
-		List<String> configTypeList = Arrays.asList(configTypeArr);
-
-		for (String cType : configTypeList) {
-			c_key = server + "." + cType;
-			c_value = server_prop.getProperty(c_key.trim());
-			configTypeMap.put(c_key, c_value);
-		}
-
-		for (Map.Entry<String, String> modelData : modelDataList.entrySet()) {
-			if ((modelData.getKey() != null || modelData.getKey() != "") && (modelData.getValue() != null || modelData.getValue() != "")) {
-				modelName = modelData.getKey();
-				if (gitRepo) {
-					byteArray = modelData.getValue().getBytes();
-				} else {
-					byteArray = getBytesFromModelFile(modelData.getValue());
+		
+		try {
+		/*
+			for (Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+				elementName = entry.getKey();
+				if (elementName.equalsIgnoreCase("server")) {
+					server = entry.getValue().getAsString().toUpperCase();
 				}
-				if(byteArray != null){
-					cv = new ArrayList<ConfigurationVariable>();
-					cvs = getAdministrationService().getConfigurationVariables(byteArray);
-					cv = cvs.getConfigurationVariables();
+			}
+			server_prop = readPropertiesFile("server-details-map.properties");
+			config_prop = readPropertiesFile("configvariable-map.properties");
 
-					for (ConfigurationVariable configurationVariable : cv) {
-						configName = configurationVariable.getName();
-						configValueProp = config_prop.getProperty(modelName + "." + configName);
-						configValue = null;
-						serverConfigKey = "";
-						serverConfigValue = "";
-						if (configValueProp != null) {
-							serverConfigArr = configValueProp.split("\\*");
+			String configType = server_prop.getProperty(server);
+			String[] configTypeArr = configType.split(",");
+			List<String> configTypeList = Arrays.asList(configTypeArr);
 
-							if (serverConfigArr.length > 1) {
-								serverConfigKey = serverConfigArr[0];
-								serverConfigKey = serverConfigKey.replace("Server", server);
-								serverConfigValue = configTypeMap.get(serverConfigKey);
-								configValue = serverConfigValue + serverConfigArr[1];
-							} else {
-								if (serverConfigArr[0].contains(".")) {
+			for (String cType : configTypeList) {
+				c_key = server + "." + cType;
+				c_value = server_prop.getProperty(c_key.trim());
+				configTypeMap.put(c_key, c_value);
+			}
+
+*/
+
+			for (Map.Entry<String, String> modelData : modelDataList.entrySet()) {
+				if ((modelData.getKey() != null || modelData.getKey() != "")
+						&& (modelData.getValue() != null || modelData.getValue() != "")) {
+					modelName = modelData.getKey();
+					if (gitRepo) {
+						byteArray = modelData.getValue().getBytes();
+					} else {
+						byteArray = getBytesFromModelFile(modelData.getValue());
+					}
+					if (byteArray != null) {
+
+			/*			cv = new ArrayList<ConfigurationVariable>();
+						cvs = getAdministrationService().getConfigurationVariables(byteArray);
+						cv = cvs.getConfigurationVariables();
+
+						for (ConfigurationVariable configurationVariable : cv) {
+							configName = configurationVariable.getName();
+							configValueProp = config_prop.getProperty(modelName + "." + configName);
+							configValue = null;
+							serverConfigKey = "";
+							serverConfigValue = "";
+							if (configValueProp != null) {
+								serverConfigArr = configValueProp.split("\\*");
+
+								if (serverConfigArr.length > 1) {
 									serverConfigKey = serverConfigArr[0];
 									serverConfigKey = serverConfigKey.replace("Server", server);
 									serverConfigValue = configTypeMap.get(serverConfigKey);
-									configValue = serverConfigValue;
+									configValue = serverConfigValue + serverConfigArr[1];
 								} else {
-									configValue = configValueProp;
+									if (serverConfigArr[0].contains(".")) {
+										serverConfigKey = serverConfigArr[0];
+										serverConfigKey = serverConfigKey.replace("Server", server);
+										serverConfigValue = configTypeMap.get(serverConfigKey);
+										configValue = serverConfigValue;
+									} else {
+										configValue = configValueProp;
+									}
 								}
+								LOG.info("Updating the ConfigValue to = " + configValue);
+								configurationVariable.setValue(configValue);
 							}
-							LOG.info("Updating the ConfigValue to = "+configValue);
-							configurationVariable.setValue(configValue);
+
 						}
 
+						cvs.setConfigurationVariables(cv);
+						getAdministrationService().saveConfigurationVariables(cvs, true);
+*/
+
+						de = new DeploymentElement(byteArray);
+						list.add(de);
 					}
 
-					cvs.setConfigurationVariables(cv);
-					getAdministrationService().saveConfigurationVariables(cvs, true);
-
-					de = new DeploymentElement(byteArray);
-					list.add(de);
+				} else {
+					return null;
 				}
-
-			} else {
-				return null;
 			}
+			DeploymentOptions options = new DeploymentOptions();
+			options.setIgnoreWarnings(true);
+			deploymentInfo = getAdministrationService().deployModel(list, options);
+		} catch (Exception e) {
+			LOG.info("Deploy Model REST API : Exception in changeConfigVariablesandDeployModel -- " + e);
+			LOG.info(
+					"Deploy Model REST API : Exception in changeConfigVariablesandDeployModel -- " + e.getStackTrace());
+			LOG.info("Deploy Model REST API : Exception in changeConfigVariablesandDeployModel -- " + e.getCause());
+			return null;
 		}
-		DeploymentOptions options = new DeploymentOptions();
-		options.setIgnoreWarnings(true);
-		deploymentInfo = getAdministrationService().deployModel(list, options);
 		return deploymentInfo;
 	}
 
-	
-	
 	/**
 	 * Read the specified properties file and return it as Properties object
 	 * 
@@ -1703,6 +1740,7 @@ public class IppService {
 	 * @return
 	 */
 	public Properties readPropertiesFile(String fileName) {
+		LOG.info("Reading properties file : Strated " + fileName);
 		Properties properties = null;
 		InputStream is = null;
 		is = getClass().getClassLoader().getResourceAsStream(fileName);
@@ -1718,47 +1756,43 @@ public class IppService {
 		return properties;
 	}
 
-	
-	
 	/**
-	 * Read the modelPathString model file and return it 
-	 * as byte array
+	 * Read the modelPathString model file and return it as byte array
 	 * 
 	 * @param modelPathString
 	 * @return
 	 */
-		public byte[] getBytesFromModelFile(String modelPathString) {
-			byte[] byteArray = null;
-			FileInputStream fis = null;
-			File file = new File(modelPathString);
-			if (file.exists()) {
-				byteArray = new byte[(int) file.length()];
-				try {
-					fis = new FileInputStream(file);
-					fis.read(byteArray);
-				} catch (IOException e) {
-					e.printStackTrace();
-				} finally {
-					if (fis != null) {
-						try {
-							fis.close();
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-
+	public byte[] getBytesFromModelFile(String modelPathString) {
+		LOG.info("Getting byte array for the model file ");
+		byte[] byteArray = null;
+		FileInputStream fis = null;
+		File file = new File(modelPathString);
+		if (file.exists()) {
+			byteArray = new byte[(int) file.length()];
+			try {
+				fis = new FileInputStream(file);
+				fis.read(byteArray);
+			} catch (IOException e) {
+				e.printStackTrace();
+			} finally {
+				if (fis != null) {
+					try {
+						fis.close();
+					} catch (IOException e) {
+						e.printStackTrace();
 					}
 
 				}
-			}else{
-				throw new RuntimeException("The specified model file "+modelPathString+" does not exist, Please check and try again..!");
+
 			}
-
-
-			return byteArray;
+		} else {
+			throw new RuntimeException(
+					"The specified model file " + modelPathString + " does not exist, Please check and try again..!");
 		}
 
-		
-		
+		return byteArray;
+	}
+
 	/**
 	 * Read the model files from git repository and return map of filename and
 	 * model file
@@ -1769,6 +1803,7 @@ public class IppService {
 	 * @return
 	 */
 	public HashMap<String, String> getFilesFromRepository(String path, boolean filenamesExists, String fileNames) {
+		LOG.info("Getting files from Repository : Started ");
 		HashMap<String, String> modelFiles = new HashMap<String, String>();
 		ZipInputStream zipInputStream = null;
 		String fileNameArr[] = fileNames.split(",");
@@ -1836,9 +1871,6 @@ public class IppService {
 		return modelFiles;
 	}
 
-
-	
-	
 	/**
 	 * Read the model files from local File/Folder location and return map of
 	 * filename and path to model file
@@ -1851,12 +1883,13 @@ public class IppService {
 	 */
 	public HashMap<String, String> getFilesFromDirectory(String path, File dir, boolean filenamesExists,
 			String fileNames) {
+		LOG.info("Getting files from Directory at path : " + path);
 		HashMap<String, String> completePaths = new HashMap<String, String>();
 		String fileNameArr[] = null;
 
 		if (!filenamesExists) {
 			for (File file : dir.listFiles()) {
-				if(file.getName().endsWith(".xpdl")){
+				if (file.getName().endsWith(".xpdl")) {
 					fileNames = fileNames + file.getName() + ",";
 				}
 			}
@@ -1870,8 +1903,70 @@ public class IppService {
 		}
 		return completePaths;
 	}
-	
-	
+
+	/**
+	 * Fetch model OID's for the model ID's
+	 * 
+	 * @param modelIds
+	 * @return
+	 */
+	public Map<String, Integer> fetchModelOidFromModelIds(String[] modelIds) {
+		Map<String, Integer> modelOidDetails = new HashMap<String, Integer>();
+		String modelId = "";
+		DeployedModelQuery dmq;
+		Models models;
+		int oid;
+		for (String fileName : modelIds) {
+			if (fileName.endsWith(".xpdl")) {
+				modelId = fileName.substring(0, fileName.indexOf(".xpdl"));
+				dmq = DeployedModelQuery.findActiveForId(modelId);
+				models = getQueryService().getModels(dmq);
+				for (DeployedModelDescription deployedModelDescription : models) {
+					oid = deployedModelDescription.getModelOID();
+					modelOidDetails.put(modelId, oid);
+				}
+			}
+		}
+
+		return modelOidDetails;
+
+	}
+
+	/**
+	 * Start/Stop daemon for automated Deployment
+	 * 
+	 * @param state
+	 * @param daemonTypes
+	 * @return
+	 */
+	public List<String> startStopDaemons(String state, String daemonTypes) {
+		List<String> manipulatedDaemonTypes = new ArrayList<String>();
+		String currentDaemonType = "";
+		String[] daemonTypeArr;
+		List<Daemon> allDaemons = getAdministrationService().getAllDaemons(true);
+		if (state.equalsIgnoreCase("stop")) {
+			LOG.info("Stopping the Daemons");
+			for (Daemon daemon : allDaemons) {
+				if (daemon.isRunning()) {
+					currentDaemonType = daemon.getType();
+					manipulatedDaemonTypes.add(currentDaemonType.trim());
+					getAdministrationService().stopDaemon(currentDaemonType.trim(), true);
+				}
+			}
+		} else {
+			LOG.info("Starting the Daemons " + daemonTypes);
+			daemonTypeArr = daemonTypes.split(",");
+			for (String daemonType : daemonTypeArr) {
+				manipulatedDaemonTypes.add(daemonType.trim());
+				getAdministrationService().startDaemon(daemonType.trim(), true);
+
+			}
+
+		}
+
+		return manipulatedDaemonTypes;
+	}
+
 	/**
 	 * Creates UserGroup with the given name, id and description
 	 * 
@@ -1947,16 +2042,16 @@ public class IppService {
 		ActivityInstances instances = getQueryService().getAllActivityInstances(query);
 		ActivityInstanceState state;
 		ActivityInstanceState fromState;
-		String currentActivityId ;
-		long activityOid ;
+		String currentActivityId;
+		long activityOid;
 		for (ActivityInstance activityInstance : instances) {
 			state = activityInstance.getState();
 			LOG.info("state: " + state);
 			fromState = ActivityInstanceState.getState(from);
 			LOG.info("fromState: " + fromState);
 			currentActivityId = activityInstance.getActivity().getId();
-			if ((state.equals(fromState) || state.equals(ActivityInstanceState.Application)) && activityInstance.getActivity().isInteractive()
-					&& currentActivityId.equals(activityId)) {
+			if ((state.equals(fromState) || state.equals(ActivityInstanceState.Application))
+					&& activityInstance.getActivity().isInteractive() && currentActivityId.equals(activityId)) {
 				activityOid = activityInstance.getOID();
 				LOG.info(activityOid);
 
@@ -1998,7 +2093,8 @@ public class IppService {
 
 		for (Document doc : documentList) {
 			String docName = doc.getName().toLowerCase();
-			if(!(docName.endsWith(".tiff") || docName.endsWith(".tif"))) break;
+			if (!(docName.endsWith(".tiff") || docName.endsWith(".tif")))
+				break;
 
 			byte[] docContent = getDocumentManagementService().retrieveDocumentContent(doc.getId());
 
@@ -2134,6 +2230,9 @@ public class IppService {
 		String fileName = ApplicationConstants.EXCEL_DUMP_NAME.getValue() + currentDate.getTime();
 		File file = new File(fileName);
 		String result = null;
+		FileInputStream fis = null;
+		ByteArrayOutputStream bos = null;
+		boolean isFileDeleted = false;
 		try {
 			LOG.info(txtCSV);
 			PrintWriter pw = new PrintWriter(file);
@@ -2141,8 +2240,8 @@ public class IppService {
 			sb.append(txtCSV);
 			pw.write(sb.toString());
 			pw.close();
-			FileInputStream fis = new FileInputStream(file);
-			ByteArrayOutputStream bos = new ByteArrayOutputStream();
+			fis = new FileInputStream(file);
+			bos = new ByteArrayOutputStream();
 			byte[] buf = new byte[1024];
 			for (int readNum; (readNum = fis.read(buf)) != -1;) {
 				bos.write(buf, 0, readNum); // no doubt here is 0
@@ -2153,6 +2252,12 @@ public class IppService {
 			byte[] bytes = bos.toByteArray();
 			result = "{\"fileName\":\"" + fileName + "\",\n \"documentContent\":" + Arrays.toString(bytes)
 					+ ",\n \"error\":" + null + "}";
+
+			pw.close();
+			fis.close();
+			bos.close();
+			isFileDeleted = file.delete();
+			LOG.info(isFileDeleted);
 		} catch (FileNotFoundException e) {
 			LOG.info("Error in Writing to CSV -- " + e.getCause());
 			LOG.info("Error in Writing to -- " + e.getMessage());
@@ -2163,132 +2268,130 @@ public class IppService {
 			LOG.info("Error in Writing to -- " + e.getMessage());
 			LOG.info("Error in Writing to -- " + e.getStackTrace());
 			result = "-1";
+		} finally {
+			try {
+				fis.close();
+				bos.close();
+			} catch (IOException e) {
+			}
 		}
 		return result;
 	}
 
-	
 	/**
-	 * Populate data for split and merge of documents for new Scanning n Indexing
+	 * Populate data for split and merge of documents for new Scanning n
+	 * Indexing
 	 * 
 	 * @param documentSplitterArray
 	 * @return
 	 */
-	public HashMap<String,HashMap<byte[],int[]>> populateDataForSplitMerge(JsonArray documentSplitterArray){
-		HashMap<String,HashMap<byte[],int[]>> formattedSpecificationMap = new HashMap<String,HashMap<byte[],int[]>>();
-		HashMap<byte[],HashMap<String,int[]>> specificationMap = new HashMap<byte[],HashMap<String,int[]>>();
-		HashMap<String,int[]> innerSpecification;
+	public HashMap<String, HashMap<byte[], int[]>> populateDataForSplitMerge(JsonArray documentSplitterArray) {
+		HashMap<String, HashMap<byte[], int[]>> formattedSpecificationMap = new HashMap<String, HashMap<byte[], int[]>>();
+		HashMap<byte[], HashMap<String, int[]>> specificationMap = new HashMap<byte[], HashMap<String, int[]>>();
+		HashMap<String, int[]> innerSpecification;
 		JsonArray documentSplitterInnerArray = null;
 		JsonArray documentPageNumberArray = null;
 		String jcrIdString = "";
 		JsonObject splitterOuterObject;
 		JsonObject splitterInnerObject;
-		String docType ="";
-		int[] pgNo ;
-		byte[] fileData =null;
+		String docType = "";
+		int[] pgNo;
+		byte[] fileData = null;
 		Document currentDocument;
 		String documentNameExtn;
 		String documentName;
 		String extension;
 		String[] fileNameArr;
-		int nameLength ;
+		int nameLength;
 		LOG.info("Populating Data to map for Split and Merge : Started");
-		try{
-			
-		
-		for(int i=0;i<documentSplitterArray.size();i++)
-		{
-			splitterOuterObject = documentSplitterArray.get(i).getAsJsonObject();
-			jcrIdString = splitterOuterObject.get("jcrID").getAsString();
-			fileData = getDocumentManagementService().retrieveDocumentContent(jcrIdString);
-			currentDocument = getDocumentManagementService().getDocument(jcrIdString);
-			documentNameExtn = currentDocument.getName();
-			fileNameArr = documentNameExtn.split("\\.");
-			nameLength = fileNameArr.length;
-			extension = fileNameArr[nameLength - 1];
-			if (!extension.equalsIgnoreCase("pdf")) {
-				if(extension.equalsIgnoreCase("tif") || extension.equalsIgnoreCase("tiff"))
-				{
-					fileData = convertMultiStripTifToPDF(fileData);
+		try {
+
+			for (int i = 0; i < documentSplitterArray.size(); i++) {
+				splitterOuterObject = documentSplitterArray.get(i).getAsJsonObject();
+				jcrIdString = splitterOuterObject.get("jcrID").getAsString();
+				fileData = getDocumentManagementService().retrieveDocumentContent(jcrIdString);
+				currentDocument = getDocumentManagementService().getDocument(jcrIdString);
+				documentNameExtn = currentDocument.getName();
+				fileNameArr = documentNameExtn.split("\\.");
+				nameLength = fileNameArr.length;
+				extension = fileNameArr[nameLength - 1];
+				if (!extension.equalsIgnoreCase("pdf")) {
+					if (extension.equalsIgnoreCase("tif") || extension.equalsIgnoreCase("tiff")) {
+						fileData = convertMultiStripTifToPDF(fileData);
+					} else if (extension.equalsIgnoreCase("jpg") || extension.equalsIgnoreCase("jpeg")
+							|| extension.equalsIgnoreCase("png") || extension.equalsIgnoreCase("gif")) {
+						fileData = convertImagesToPdf(fileData);
+					} else {
+						throw new RuntimeException(
+								"Invalid document format passed : Splitting and Merging is only supported for PDF, TIFF, JPEG and PNG formats");
+					}
 				}
-				else if(extension.equalsIgnoreCase("jpg") || extension.equalsIgnoreCase("jpeg")
-						|| extension.equalsIgnoreCase("png") || extension.equalsIgnoreCase("gif")){
-					fileData = convertImagesToPdf(fileData);
-				}else{
-					throw new RuntimeException(
-							"Invalid document format passed : Splitting and Merging is only supported for PDF, TIFF, JPEG and PNG formats");
+				documentSplitterInnerArray = splitterOuterObject.get("docTypes").getAsJsonArray();
+				innerSpecification = new LinkedHashMap<String, int[]>();
+				for (int j = 0; j < documentSplitterInnerArray.size(); j++) {
+					splitterInnerObject = documentSplitterInnerArray.get(j).getAsJsonObject();
+					docType = splitterInnerObject.get("docType").getAsString();
+					documentPageNumberArray = splitterInnerObject.get("pageNumbers").getAsJsonArray();
+					pgNo = new int[documentPageNumberArray.size()];
+					for (int k = 0; k < documentPageNumberArray.size(); k++) {
+						pgNo[k] = documentPageNumberArray.get(k).getAsInt();
+					}
+					innerSpecification.put(docType, pgNo);
 				}
+				specificationMap.put(fileData, innerSpecification);
 			}
-			documentSplitterInnerArray = splitterOuterObject.get("docTypes").getAsJsonArray();
-			innerSpecification = new LinkedHashMap<String,int[]>();
-			for(int j=0;j<documentSplitterInnerArray.size();j++)
-			{
-				splitterInnerObject = documentSplitterInnerArray.get(j).getAsJsonObject();
-				docType = splitterInnerObject.get("docType").getAsString();
-				documentPageNumberArray = splitterInnerObject.get("pageNumbers").getAsJsonArray();
-				pgNo = new int[documentPageNumberArray.size()];
-				for(int k=0;k<documentPageNumberArray.size();k++)
-				{
-					pgNo[k] = documentPageNumberArray.get(k).getAsInt();
-				}
-				innerSpecification.put(docType, pgNo);
-			}
-			specificationMap.put(fileData, innerSpecification);
-		}
-		
-		formattedSpecificationMap = formatSplittingSpecification(specificationMap);
-		
-		}
-		catch(DocumentException e){
+
+			formattedSpecificationMap = formatSplittingSpecification(specificationMap);
+
+		} catch (DocumentException e) {
 			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e);
 			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getStackTrace());
 			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getCause());
-		}
-		catch(IOException e){
+		} catch (IOException e) {
 			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e);
 			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getStackTrace());
 			LOG.info("Fetch and Save Document : Exception convertDocuments -- " + e.getCause());
 		}
 		return formattedSpecificationMap;
-			
-		}
-	
+
+	}
+
 	/**
 	 * Convert images (jpeg,png) to PDF for new Scanning n Indexing
 	 * 
 	 * @param originalContent
 	 * @return
 	 */
-	public byte[] convertImagesToPdf(byte[] originalContent){
+	public byte[] convertImagesToPdf(byte[] originalContent) {
 		LOG.info("Inside convertImgesToPdf Method -- conversion Started for a document");
 		byte[] convertedContent = null;
 		try {
 			com.itextpdf.text.Document document = new com.itextpdf.text.Document();
 			PdfWriter writer = null;
-			ByteArrayOutputStream bos = new ByteArrayOutputStream();			
+			ByteArrayOutputStream bos = new ByteArrayOutputStream();
 			Image image = Image.getInstance(originalContent);
 			Rectangle A4 = PageSize.A4;
-			float scalePortrait = Math.min(A4.getWidth() / image.getWidth(),A4.getHeight() / image.getHeight());
-			float scaleLandscape = Math.min(A4.getHeight() / image.getWidth(),A4.getWidth() / image.getHeight());
+			float scalePortrait = Math.min(A4.getWidth() / image.getWidth(), A4.getHeight() / image.getHeight());
+			float scaleLandscape = Math.min(A4.getHeight() / image.getWidth(), A4.getWidth() / image.getHeight());
 			boolean isLandscape = scaleLandscape > scalePortrait;
 			float w;
-		    float h;
-		    if (isLandscape) {
-		    	A4 = A4.rotate();
-		        w = image.getWidth() * scaleLandscape;
-		        h = image.getHeight() * scaleLandscape;
-		    } else {
-		        w = image.getWidth() * scalePortrait;
-		        h = image.getHeight() * scalePortrait;
-		    }
-		    writer = PdfWriter.getInstance(document, bos);
+			float h;
+			if (isLandscape) {
+				A4 = A4.rotate();
+				w = image.getWidth() * scaleLandscape;
+				h = image.getHeight() * scaleLandscape;
+			} else {
+				w = image.getWidth() * scalePortrait;
+				h = image.getHeight() * scalePortrait;
+			}
+			writer = PdfWriter.getInstance(document, bos);
 			writer.open();
 			document.open();
 			image.scaleAbsolute(w, h);
-            float posH = (A4.getHeight() - h) / 2;
-            float posW = (A4.getWidth() - w) / 2;
+			float posH = (A4.getHeight() - h) / 2;
+			float posW = (A4.getWidth() - w) / 2;
 
-            image.setAbsolutePosition(posW, posH);
+			image.setAbsolutePosition(posW, posH);
 			image.setBorderWidth(0);
 			image.scaleAbsoluteHeight(PageSize.A4.getHeight());
 			image.scaleAbsoluteWidth(PageSize.A4.getWidth());
@@ -2297,7 +2400,7 @@ public class IppService {
 			convertedContent = bos.toByteArray();
 			writer.close();
 			bos.close();
-			
+
 		} catch (DocumentException e) {
 			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e);
 			LOG.info("Convert Img to Pdf : Exception convertDocuments -- " + e.getStackTrace());
@@ -2310,55 +2413,52 @@ public class IppService {
 		return convertedContent;
 	}
 
-	
 	/**
-	 * Format the document specification for splitting for new Scanning n Indexing
+	 * Format the document specification for splitting for new Scanning n
+	 * Indexing
 	 * 
 	 * @param originalSpecificationMap
 	 * @return
 	 */
-	public HashMap<String,HashMap<byte[],int[]>> formatSplittingSpecification(HashMap<byte[],HashMap<String,int[]>> originalSpecificationMap){
-		HashMap<byte[],int[]> innerMap ;
-		HashMap<String,HashMap<byte[],int[]>> formattedSpecificationMap = new HashMap<String,HashMap<byte[],int[]>>();
-		byte[] filedata =null;
-		String currentDocType= "";
+	public HashMap<String, HashMap<byte[], int[]>> formatSplittingSpecification(
+			HashMap<byte[], HashMap<String, int[]>> originalSpecificationMap) {
+		HashMap<byte[], int[]> innerMap;
+		HashMap<String, HashMap<byte[], int[]>> formattedSpecificationMap = new HashMap<String, HashMap<byte[], int[]>>();
+		byte[] filedata = null;
+		String currentDocType = "";
 		int[] currentPgNoArr = null;
-		
-		for (Map.Entry<byte[], HashMap<String,int[]>> originalOuterMap : originalSpecificationMap.entrySet()) 
-		{
+
+		for (Map.Entry<byte[], HashMap<String, int[]>> originalOuterMap : originalSpecificationMap.entrySet()) {
 			filedata = originalOuterMap.getKey();
-			for(Map.Entry<String, int[]> originalInnerMap : originalOuterMap.getValue().entrySet())
-			{
+			for (Map.Entry<String, int[]> originalInnerMap : originalOuterMap.getValue().entrySet()) {
 				currentDocType = originalInnerMap.getKey();
 				currentPgNoArr = originalInnerMap.getValue();
-				if(formattedSpecificationMap.containsKey(currentDocType))
-				{
+				if (formattedSpecificationMap.containsKey(currentDocType)) {
 					innerMap = formattedSpecificationMap.get(currentDocType);
 					innerMap.put(filedata, currentPgNoArr);
 					formattedSpecificationMap.put(currentDocType, innerMap);
-				}
-				else
-				{
-					innerMap = new LinkedHashMap<byte[],int[]>();
+				} else {
+					innerMap = new LinkedHashMap<byte[], int[]>();
 					innerMap.put(filedata, currentPgNoArr);
 					formattedSpecificationMap.put(currentDocType, innerMap);
 				}
 			}
-			
+
 		}
 		return formattedSpecificationMap;
 	}
-	
-	
+
 	/**
-	 * Merging multiple PDF's to create a single document for a DocType for new Scanning n Indexing
+	 * Merging multiple PDF's to create a single document for a DocType for new
+	 * Scanning n Indexing
 	 * 
 	 * @param formattedSpecificationMap
 	 * @param jsonObject
 	 * @return
 	 */
-	public HashMap<String,String> mergePdfDocuments(HashMap<String,HashMap<byte[],int[]>> formattedSpecificationMap, JsonObject jsonObject){
-		
+	public HashMap<String, String> mergePdfDocuments(HashMap<String, HashMap<byte[], int[]>> formattedSpecificationMap,
+			JsonObject jsonObject) {
+
 		HashMap<String, String> uploadedDocuments = new HashMap<String, String>();
 		String docType = "";
 		ByteArrayOutputStream outputStream = null;
@@ -2369,8 +2469,8 @@ public class IppService {
 		PdfImportedPage pdfImportedPage;
 		PdfContentByte contentByte;
 		Rectangle rectangle;
-		com.itextpdf.text.Document document ;
-		String jcrId ="";
+		com.itextpdf.text.Document document;
+		String jcrId = "";
 		PdfReader reader;
 		LOG.info("Document splitting and merging : Started" + formattedSpecificationMap.toString());
 		try {
@@ -2397,12 +2497,12 @@ public class IppService {
 					pdfWriter.freeReader(reader);
 				}
 				document.close();
-				
-				jcrId = uploadMergedDocument(outputStream.toByteArray(),docType,jsonObject);
-				
+
+				jcrId = uploadMergedDocument(outputStream.toByteArray(), docType, jsonObject);
+
 				uploadedDocuments.put(docType, jcrId);
-				
-				outputStream.flush();			
+
+				outputStream.flush();
 				outputStream.close();
 				pdfWriter.close();
 				LOG.info("Document Type " + docType + " created.");
@@ -2423,7 +2523,7 @@ public class IppService {
 		return uploadedDocuments;
 
 	}
-	
+
 	/**
 	 * Uploading the merged PDF documents for new Scanning n Indexing
 	 * 
@@ -2432,43 +2532,101 @@ public class IppService {
 	 * @param jsonObject
 	 * @return
 	 */
-	public String uploadMergedDocument(byte[] documentContent,String docType, JsonObject jsonObject){
+	public String uploadMergedDocument(byte[] documentContent, String docType, JsonObject jsonObject) {
 		LOG.info("Uploading the merged documents : Started");
 		String jcrId = "";
 		String schemeNo = "schemeNo";
-		String memberNo ="memberNo";
+		String memberNo = "memberNo";
 		String workType = "";
-		Long processOid =0L;
+		Long processOid = 0L;
 		String fileName = docType;
-		
+
 		if (jsonObject.get("schemeNo") != null) {
 			schemeNo = jsonObject.get("schemeNo").getAsString();
-			fileName = fileName +"-"+schemeNo;
+			fileName = fileName + "-" + schemeNo;
 		}
 		if (jsonObject.get("memberNo") != null) {
-			memberNo = jsonObject.get("memberNo").getAsString();	
-			fileName = fileName +"-"+memberNo;
+			memberNo = jsonObject.get("memberNo").getAsString();
+			fileName = fileName + "-" + memberNo;
 		}
 		if (jsonObject.get("workType") != null) {
-			workType = jsonObject.get("workType").getAsString();			
+			workType = jsonObject.get("workType").getAsString();
 		}
 		if (jsonObject.get("processOID") != null) {
-			processOid = jsonObject.get("processOID").getAsLong();			
+			processOid = jsonObject.get("processOID").getAsLong();
 		}
-		
-		Map<String,Object> metaDataMap = this.populateDocumentProperties(schemeNo,memberNo,workType,docType);
+
+		Map<String, Object> metaDataMap = this.populateDocumentProperties(schemeNo, memberNo, workType, docType);
 		fileName = fileName + ".pdf";
-		fileName=fileName.replaceAll("[\\\\|?:\"<>\\/*]+","_");
+		fileName = fileName.replaceAll("[\\\\|?:\"<>\\/*]+", "_");
 		String contentType = URLConnection.guessContentTypeFromName(fileName);
-		
-		
-		Document document = this.saveDocumentinIpp(documentContent, fileName, contentType,
-				processOid, metaDataMap);
+
+		Document document = this.saveDocumentinIpp(documentContent, fileName, contentType, processOid, metaDataMap);
 		jcrId = document.getId();
-		
-		LOG.info("After uploading the document : "+jcrId + "for DocType : " +docType);
+
+		LOG.info("After uploading the document : " + jcrId + "for DocType : " + docType);
 		return jcrId;
 	}
 
-}
+	/**
+	 * Add the list of documentsIds to the process instance for Scanning &
+	 * Indexing
+	 * 
+	 * @param documentIdList
+	 * @param processOid
+	 * @return
+	 */
+	public String addDocumentsToprocess(List<String> documentIdList, Long processOid) {
+		String status = "";
+		try {
+			List<Document> documentList = getDocumentManagementService().getDocuments(documentIdList);
+			addDocumentsToProcessAttachments(documentList, processOid);
+			status = "Success";
+		} catch (Exception e) {
+			LOG.info("Adding documents to Multiple processes : Exception for a process" + processOid.toString() + ": "
+					+ e);
+			LOG.info("Adding documents to Multiple processes : Exception for a process" + processOid.toString() + ": "
+					+ e.getStackTrace());
+			LOG.info("Adding documents to Multiple processes : Exception for a process" + processOid.toString() + ": "
+					+ e.getCause());
+			status = "Failure";
+			return status;
+		}
+		return status;
+	}
 
+	/**
+	 * Complete the multiple suspended activities for Scanning & Indexing
+	 * 
+	 * @param activityOidList
+	 * @return
+	 */
+	public Map<Long, String> completeSuspendedActivities(List<Long> activityOidList) {
+		Map<Long, String> statusMap = new HashMap<Long, String>();
+		Long currentActivityOid = 0l;
+		ActivityInstance instance;
+
+		for (int i = 0; i < activityOidList.size(); i++) {
+			try {
+				currentActivityOid = activityOidList.get(i);
+				instance = getWorkflowService().activateAndComplete(currentActivityOid, null, null);
+				if (instance != null) {
+					statusMap.put(currentActivityOid, "Success");
+				} else {
+					statusMap.put(currentActivityOid, "Failure");
+				}
+
+			} catch (Exception e) {
+				statusMap.put(currentActivityOid, "Failure");
+				LOG.info("Exception inside completeMultipleActivities  REST API :  Can't complete Activity with OID"
+						+ currentActivityOid + " !" + e.getCause());
+				LOG.info("Exception inside completeMultipleActivities  REST API :  Can't complete Activity with OID"
+						+ currentActivityOid + " !" + e.getMessage());
+				LOG.info("Exception inside completeMultipleActivities  REST API :  Can't complete Activity with OID"
+						+ currentActivityOid + " !" + e.getStackTrace());
+			}
+		}
+		return statusMap;
+	}
+
+}

@@ -43,7 +43,6 @@ public class DocumentServices {
 		this.ippService = ippService;
 	}
 
-
 	private static final Logger LOG = LogManager.getLogger(DocumentServices.class);
 
 	/**
@@ -720,7 +719,7 @@ public class DocumentServices {
 		InputStream inputStream;
 		int checkpointLimit;
 		List<String> documentIds = null;
-		
+
 		try {
 			inputStream = dataHandler.getInputStream();
 			List<String> documentContentLines = IOUtils.readLines(inputStream);
@@ -736,7 +735,7 @@ public class DocumentServices {
 				if (length < counterLimit) {
 					counterLimit = length;
 				}
-				
+
 				// Looping the document ID's from counter till batch size read
 				// from properties file
 				for (int i = counter; i < counterLimit;) {
@@ -899,8 +898,7 @@ public class DocumentServices {
 		LOG.info("Splitting and Merging documents : Started " + input);
 		JsonObject response = new JsonObject();
 		JsonArray documentSplitterArray = null;
-		
-		
+
 		try {
 			JsonObject jsonObject = ippService.parseJSONObject(input);
 
@@ -911,10 +909,11 @@ public class DocumentServices {
 				return Response.status(400)
 						.entity("{\"response\":\"'documentSplitter' parameter missing in request body.\"}").build();
 			}
-			
-			HashMap<String,HashMap<byte[],int[]>> formattedSpecificationMap = ippService.populateDataForSplitMerge(documentSplitterArray);
-			
-			HashMap<String,String> uploadDetails = ippService.mergePdfDocuments(formattedSpecificationMap,jsonObject);
+
+			HashMap<String, HashMap<byte[], int[]>> formattedSpecificationMap = ippService
+					.populateDataForSplitMerge(documentSplitterArray);
+
+			HashMap<String, String> uploadDetails = ippService.mergePdfDocuments(formattedSpecificationMap, jsonObject);
 			LOG.info(uploadDetails.toString());
 			for (Map.Entry<String, String> detailsEntry : uploadDetails.entrySet()) {
 				response.addProperty(detailsEntry.getKey(), detailsEntry.getValue());
@@ -932,5 +931,75 @@ public class DocumentServices {
 			return Response.serverError().build();
 		}
 	}
-	
+
+	/**
+	 * Add documents to multiple processes in Scanning & Indexing
+	 * 
+	 * @param input
+	 * @return
+	 */
+	@POST
+	@Path("addDocumentsToMultipleProcesses")
+	@Produces(MediaType.APPLICATION_JSON)
+	@Consumes(MediaType.APPLICATION_JSON)
+	public Response addDocumentsToMultipleProcesses(String input) {
+		LOG.info("Adding documents to multiple processes : Started " + input);
+		JsonObject jsonObject;
+		JsonArray documentIdArray = null;
+		List<String> documentIds = null;
+		String currentdocId;
+		Long currentProcessId;
+		JsonObject outerObject = new JsonObject();
+		JsonObject innerObject;
+		JsonArray jsonArray = new JsonArray();
+		JsonArray inputOuterArray = new JsonArray();
+		JsonObject inputInnerObject;
+		String status = "";
+		Map<Long, String> statusMap = new HashMap<Long, String>();
+		try {
+			jsonObject = ippService.parseJSONObject(input);
+			if (jsonObject.get("DocumentDetails") != null) {
+				inputOuterArray = jsonObject.get("DocumentDetails").getAsJsonArray();
+			} else {
+				return Response.status(400)
+						.entity("{\"response\":\"'DocumentDetails' parameter missing in request body.\"}").build();
+			}
+			for (int i = 0; i < inputOuterArray.size(); i++) {
+				inputInnerObject = inputOuterArray.get(i).getAsJsonObject();
+				if (inputInnerObject.get("processOid") != null) {
+					currentProcessId = inputInnerObject.get("processOid").getAsLong();
+					if (inputInnerObject.get("jcrIds") != null) {
+						documentIdArray = inputInnerObject.get("jcrIds").getAsJsonArray();
+						documentIds = new ArrayList<String>();
+						for (int j = 0; j < documentIdArray.size(); j++) {
+							currentdocId = documentIdArray.get(j).getAsString();
+							documentIds.add(currentdocId);
+						}
+						status = ippService.addDocumentsToprocess(documentIds, currentProcessId);
+						statusMap.put(currentProcessId, status);
+					} else {
+						statusMap.put(currentProcessId, "No 'jcrIds' available");
+					}
+				} else {
+					statusMap.put(Long.valueOf(i), "No 'processOid' available");
+				}
+			}
+
+			for (Map.Entry<Long, String> mapEntry : statusMap.entrySet()) {
+				innerObject = new JsonObject();
+				innerObject.addProperty("ProcessOid", mapEntry.getKey());
+				innerObject.addProperty("Status", mapEntry.getValue());
+				jsonArray.add(innerObject);
+			}
+			outerObject.add("response", jsonArray);
+		} catch (Exception e) {
+			LOG.info("Adding documents to Multiple processes : Exception -- " + e);
+			LOG.info("Adding documents to Multiple processes : Exception -- " + e.getStackTrace().toString());
+			LOG.info("Adding documents to Multiple processes : Exception -- " + e.getCause());
+			return Response.serverError().build();
+		}
+		return Response.ok(outerObject.toString(), MediaType.APPLICATION_JSON_TYPE)
+				.header("Access-Control-Allow-Origin", "*").build();
+	}
+
 }

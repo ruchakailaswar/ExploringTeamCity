@@ -10,7 +10,7 @@ public enum ApplicationConstants {
 	OPERATIONS_PRODUCT("OperationsProduct"), CLAIMS_PRODUCT("ClaimsProduct"), NEW_BUSINESS_PRODUCT("NewBusinessProduct"),ROUTE_BY_WORKTYPE_PROCESS_DEFINITION("RouteByWorkType"),
 	REFERENCE_ID_XPATH("ReferenceID"),REVIEW_PROCESS_EXCEPTION_ID("ReviewProcessException"),
 	URL_STRING("/ipp-portal/services/rest/document-triage/documents/"),EXCEL_DUMP_NAME("Migration Report"), PROCESS_DATA_PATH_ID("ProcessData"), MEMBER_NAME_XPATH("MemberName"),
-	EXCEL_DUMP_KEYS("processInstanceOID,memberNumber,schemeNumber,workType,action");
+	EXCEL_DUMP_KEYS("processInstanceOID,memberNumber,schemeNumber,workType,action"), DATAPATHLIST("SchemeNo,MemberNo,SchemeName,META_DATA_MEMBER_NAME"),META_DATA_MEMBER_NAME("MemberName,MemberFirstName,MemberLastName");
 
 
 	private String value;
