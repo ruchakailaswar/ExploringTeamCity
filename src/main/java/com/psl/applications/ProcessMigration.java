@@ -108,7 +108,6 @@ public class ProcessMigration {
 			long currentProcessOID) {
 
 		LOG.info("Inside abortActiveProcess, starting user : " + username);
-		LOG.info("Inside abortActiveProcess : " + processDetail);
 
 		ServiceFactory sf = ServiceFactoryLocator.get(username, password);
 		WorkflowService wf = sf.getWorkflowService();
@@ -237,8 +236,9 @@ public class ProcessMigration {
 			LOG.info("Cannot Abort Process for Process OID : " + e.getCause());
 			LOG.info("Cannot Abort Process for Process OID : " + e.getMessage());
 			LOG.info("Cannot Abort Process for Process OID : " + e.getStackTrace());
-		} 
-			return isAborted;
+		
 	}
-
+		return isAborted;
 }
+}
+

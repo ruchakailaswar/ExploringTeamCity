@@ -56,7 +56,7 @@ public class ProcessDetailsService {
 	private static final String SELECT_JSON_DATA = "Select json_data from process_json_data where processoid = ?";
 	private static final String INSERT_JSON_DATA = "INSERT into process_json_data(processOid,json_data) values(?,?)";
 	private static final String UPDATE_JSON_DATA = "UPDATE process_json_data SET json_data = ? WHERE processOid = ?";
-	private static final String INSERT_WORKTYPE = "INSERT into WORK_TYPES (TEXT,START_PROCESS,QC,AUTHORIZATION_REQUIRED,ACTIVE,INDEXING_PRIORITY,CONDITIONAL_PERFORMER,ADMINISTRATOR,AUTHORIZER,QC_OPERATOR) values (?,'{DynamicModel}DynamicProcess','N','N','Y','Normal','{Liberty}IndexOperator','{Liberty}IndexOperator',null,null)";
+	private static final String INSERT_WORKTYPE = "INSERT into WORK_TYPES (TEXT,START_PROCESS,QC,AUTHORIZATION_REQUIRED,ACTIVE,INDEXING_PRIORITY,CONDITIONAL_PERFORMER,ADMINISTRATOR,AUTHORIZER,QC_OPERATOR) values (?,?,'N','N','Y','Normal','{Liberty}IndexOperator','{Liberty}IndexOperator',null,null)";
 
 	@Autowired
 	IppService ippService;
@@ -685,11 +685,11 @@ public class ProcessDetailsService {
 
 	@POST
 	@Produces(MediaType.APPLICATION_JSON)
-	@Path("addWorktypeToDb/{workType}")
-	public Response addWorktypeToDb(@PathParam("workType") String workType) {
+	@Path("addWorktypeToDb/{workType}/{processId}")
+	public Response addWorktypeToDb(@PathParam("workType") String workType, @PathParam("processId") String processId) {
 		LOG.info("Adding Worktype to the worktype table :  Started");
 		try {
-			int row = jdbcTemplate.update(INSERT_WORKTYPE, workType);
+			int row = jdbcTemplate.update(INSERT_WORKTYPE, workType, processId);
 
 			LOG.info("Inside addWorktypeToDb ");
 

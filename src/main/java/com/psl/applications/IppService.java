@@ -1247,15 +1247,8 @@ public class IppService {
 	 */
 
 	public void attachDocuments(long fromProcessOid, long toProcessOid) {
-		LOG.info("Inside attachDocuments Method : "+fromProcessOid+"-------"+toProcessOid);
-		try{
 		List<Document> documents = this.getAttachedDocuments(fromProcessOid);
 		this.addDocumentsToProcessAttachments(documents, toProcessOid);
-		}catch(Exception e){
-			LOG.info("Error in Attach documents -- " + e.getCause());
-			LOG.info("Error in Attach documents -- " + e.getMessage());
-			LOG.info("Error in Attach documents -- " + e.getStackTrace());
-		}
 	}
 
 	/**
