@@ -683,7 +683,7 @@ public class IppService {
 		String dataPathValue = null;
 		String processState = "";
 		String searchValue = "";
-		String firstName,lastName = "";
+		String firstName, lastName = "";
 		boolean isMatchFound = true;
 		String[] dataIDsArray = ApplicationConstants.DATAPATHLIST.getValue().split(",");
 
@@ -1079,9 +1079,11 @@ public class IppService {
 	 * @param pis
 	 * @param setDataPath
 	 * @param dataPathJson
+	 * @param processOIDFilter
 	 * @return JsonObject
 	 */
-	public JsonObject fetchAndSetProcessDataPaths(ProcessInstances pis, boolean setDataPath, JsonObject dataPathJson) {
+	public JsonObject fetchAndSetProcessDataPaths(ProcessInstances pis, boolean setDataPath, JsonObject dataPathJson,
+			long processOIDFilter) {
 		JsonObject jo = null;
 		JsonArray ja = new JsonArray();
 		JsonObject mainObj = new JsonObject();
@@ -1089,8 +1091,7 @@ public class IppService {
 		String datPathValue = null;
 		long processInstanceOID = 0L;
 		ProcessInstanceState processState = null;
-
-		for (Iterator iterator = pis.iterator(); iterator.hasNext();) {
+		outer: for (Iterator iterator = pis.iterator(); iterator.hasNext();) {
 
 			try {
 
@@ -1101,6 +1102,30 @@ public class IppService {
 						+ processState);
 				if (processState != ProcessInstanceState.Aborted && processState != ProcessInstanceState.Aborting
 						&& processState != ProcessInstanceState.Interrupted) {
+
+					Map<String, Serializable> dataPathMap = getWorkflowService().getInDataPaths(processInstanceOID,
+							null);
+					jo = new JsonObject();
+					jo.addProperty("processOID", processInstanceOID);
+					jo.addProperty("processStatus", pi.getState().getName());
+					if (dataPathMap != null) {
+						Set<Map.Entry<String, Serializable>> jsonMap = dataPathMap.entrySet();
+						if (jsonMap != null) {
+							for (Map.Entry<String, Serializable> mapEntry : jsonMap) {
+								dataPathId = mapEntry.getKey();
+
+								LOG.info("Inside fetchAndSetProcessDataPaths - Fetching Data Paths : " + dataPathId);
+								datPathValue = mapEntry.getValue() + "";
+								if (processOIDFilter != 0 && dataPathId.equals("ReferenceID")
+										&& Long.parseLong(datPathValue) != processOIDFilter) {
+									continue outer;
+								} else {
+									jo.addProperty(dataPathId, datPathValue);
+								}
+							}
+						}
+					}
+					ja.add(jo);
 					if (setDataPath) {
 						LOG.info("Inside fetchAndSetProcessDataPaths - Data Paths to set : " + dataPathJson);
 						Set<Map.Entry<String, JsonElement>> jsonMap = dataPathJson.entrySet();
@@ -1116,28 +1141,8 @@ public class IppService {
 							}
 						}
 					}
-					Map<String, Serializable> dataPathMap = getWorkflowService().getInDataPaths(processInstanceOID,
-							null);
-					jo = new JsonObject();
-					jo.addProperty("processOID", processInstanceOID);
-					jo.addProperty("processStatus", pi.getState().getName());
-					if (dataPathMap != null) {
-						LOG.info("Inside fetchAndSetProcessDataPaths - Data Paths to set : " + dataPathJson);
-						Set<Map.Entry<String, Serializable>> jsonMap = dataPathMap.entrySet();
-						if (jsonMap != null) {
-							for (Map.Entry<String, Serializable> mapEntry : jsonMap) {
-								dataPathId = mapEntry.getKey();
-
-								LOG.info("Inside fetchAndSetProcessDataPaths - Fetching Data Paths : " + dataPathId);
-
-								datPathValue = mapEntry.getValue() + "";
-								jo.addProperty(dataPathId, datPathValue);
-
-							}
-						}
-					}
-					ja.add(jo);
 				}
+
 			} catch (ObjectNotFoundException e) {
 
 				LOG.info("Inside fetchAndSetProcessDataPaths - Cannot find data path : " + dataPathId + " : "
@@ -1639,29 +1644,24 @@ public class IppService {
 		String c_key;
 		String c_value;
 
-		
 		try {
-		/*
-			for (Entry<String, JsonElement> entry : jsonObject.entrySet()) {
-				elementName = entry.getKey();
-				if (elementName.equalsIgnoreCase("server")) {
-					server = entry.getValue().getAsString().toUpperCase();
-				}
-			}
-			server_prop = readPropertiesFile("server-details-map.properties");
-			config_prop = readPropertiesFile("configvariable-map.properties");
-
-			String configType = server_prop.getProperty(server);
-			String[] configTypeArr = configType.split(",");
-			List<String> configTypeList = Arrays.asList(configTypeArr);
-
-			for (String cType : configTypeList) {
-				c_key = server + "." + cType;
-				c_value = server_prop.getProperty(c_key.trim());
-				configTypeMap.put(c_key, c_value);
-			}
-
-*/
+			/*
+			 * for (Entry<String, JsonElement> entry : jsonObject.entrySet()) {
+			 * elementName = entry.getKey(); if
+			 * (elementName.equalsIgnoreCase("server")) { server =
+			 * entry.getValue().getAsString().toUpperCase(); } } server_prop =
+			 * readPropertiesFile("server-details-map.properties"); config_prop
+			 * = readPropertiesFile("configvariable-map.properties");
+			 * 
+			 * String configType = server_prop.getProperty(server); String[]
+			 * configTypeArr = configType.split(","); List<String>
+			 * configTypeList = Arrays.asList(configTypeArr);
+			 * 
+			 * for (String cType : configTypeList) { c_key = server + "." +
+			 * cType; c_value = server_prop.getProperty(c_key.trim());
+			 * configTypeMap.put(c_key, c_value); }
+			 * 
+			 */
 
 			for (Map.Entry<String, String> modelData : modelDataList.entrySet()) {
 				if ((modelData.getKey() != null || modelData.getKey() != "")
@@ -1674,43 +1674,41 @@ public class IppService {
 					}
 					if (byteArray != null) {
 
-			/*			cv = new ArrayList<ConfigurationVariable>();
-						cvs = getAdministrationService().getConfigurationVariables(byteArray);
-						cv = cvs.getConfigurationVariables();
-
-						for (ConfigurationVariable configurationVariable : cv) {
-							configName = configurationVariable.getName();
-							configValueProp = config_prop.getProperty(modelName + "." + configName);
-							configValue = null;
-							serverConfigKey = "";
-							serverConfigValue = "";
-							if (configValueProp != null) {
-								serverConfigArr = configValueProp.split("\\*");
-
-								if (serverConfigArr.length > 1) {
-									serverConfigKey = serverConfigArr[0];
-									serverConfigKey = serverConfigKey.replace("Server", server);
-									serverConfigValue = configTypeMap.get(serverConfigKey);
-									configValue = serverConfigValue + serverConfigArr[1];
-								} else {
-									if (serverConfigArr[0].contains(".")) {
-										serverConfigKey = serverConfigArr[0];
-										serverConfigKey = serverConfigKey.replace("Server", server);
-										serverConfigValue = configTypeMap.get(serverConfigKey);
-										configValue = serverConfigValue;
-									} else {
-										configValue = configValueProp;
-									}
-								}
-								LOG.info("Updating the ConfigValue to = " + configValue);
-								configurationVariable.setValue(configValue);
-							}
-
-						}
-
-						cvs.setConfigurationVariables(cv);
-						getAdministrationService().saveConfigurationVariables(cvs, true);
-*/
+						/*
+						 * cv = new ArrayList<ConfigurationVariable>(); cvs =
+						 * getAdministrationService().getConfigurationVariables(
+						 * byteArray); cv = cvs.getConfigurationVariables();
+						 * 
+						 * for (ConfigurationVariable configurationVariable :
+						 * cv) { configName = configurationVariable.getName();
+						 * configValueProp = config_prop.getProperty(modelName +
+						 * "." + configName); configValue = null;
+						 * serverConfigKey = ""; serverConfigValue = ""; if
+						 * (configValueProp != null) { serverConfigArr =
+						 * configValueProp.split("\\*");
+						 * 
+						 * if (serverConfigArr.length > 1) { serverConfigKey =
+						 * serverConfigArr[0]; serverConfigKey =
+						 * serverConfigKey.replace("Server", server);
+						 * serverConfigValue =
+						 * configTypeMap.get(serverConfigKey); configValue =
+						 * serverConfigValue + serverConfigArr[1]; } else { if
+						 * (serverConfigArr[0].contains(".")) { serverConfigKey
+						 * = serverConfigArr[0]; serverConfigKey =
+						 * serverConfigKey.replace("Server", server);
+						 * serverConfigValue =
+						 * configTypeMap.get(serverConfigKey); configValue =
+						 * serverConfigValue; } else { configValue =
+						 * configValueProp; } } LOG.info(
+						 * "Updating the ConfigValue to = " + configValue);
+						 * configurationVariable.setValue(configValue); }
+						 * 
+						 * }
+						 * 
+						 * cvs.setConfigurationVariables(cv);
+						 * getAdministrationService().saveConfigurationVariables
+						 * (cvs, true);
+						 */
 
 						de = new DeploymentElement(byteArray);
 						list.add(de);
@@ -1827,7 +1825,7 @@ public class IppService {
 
 					fileContent = stringWriter.toString().trim();
 
-					if (filenamesExists) {
+					if (filenamesExists && (!fileNames.equalsIgnoreCase("all") || !fileNames.equals("")) ) {
 
 						for (String fileName : fileNameArr) {
 
@@ -1918,11 +1916,13 @@ public class IppService {
 		int oid;
 		for (String fileName : modelIds) {
 			if (fileName.endsWith(".xpdl")) {
-				modelId = fileName.substring(0, fileName.indexOf(".xpdl"));
+				modelId = fileName.substring(0, fileName.indexOf(".xpdl")).trim();
+				modelOidDetails.put(modelId, 0);// for new models
 				dmq = DeployedModelQuery.findActiveForId(modelId);
 				models = getQueryService().getModels(dmq);
 				for (DeployedModelDescription deployedModelDescription : models) {
 					oid = deployedModelDescription.getModelOID();
+					LOG.info("Model ID: "+modelId+" Version: "+oid);
 					modelOidDetails.put(modelId, oid);
 				}
 			}

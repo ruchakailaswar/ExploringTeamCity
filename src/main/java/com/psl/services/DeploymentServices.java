@@ -29,7 +29,7 @@ import com.psl.beans.ApplicationConstants;
 @Component
 @Path("/deploymentServices")
 public class DeploymentServices {
-	private static final Logger LOG = LogManager.getLogger(ProcessDetailsService.class);
+	private static final Logger LOG = LogManager.getLogger(DeploymentServices.class);
 
 
 	@Autowired
@@ -188,6 +188,7 @@ public class DeploymentServices {
 			
 		}catch(Exception e)
 		{
+			e.printStackTrace();
 			LOG.info("Manipulating the Daemons REST API : Exception in manipulateDaemons -- " + e);
 			LOG.info("Manipulating the Daemons REST API : Exception in manipulateDaemons -- " + e.getStackTrace());
 			LOG.info("Manipulating the Daemons REST API : Exception in manipulateDaemons -- " + e.getCause());

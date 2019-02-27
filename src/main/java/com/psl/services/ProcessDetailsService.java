@@ -57,6 +57,8 @@ public class ProcessDetailsService {
 	private static final String INSERT_JSON_DATA = "INSERT into process_json_data(processOid,json_data) values(?,?)";
 	private static final String UPDATE_JSON_DATA = "UPDATE process_json_data SET json_data = ? WHERE processOid = ?";
 	private static final String INSERT_WORKTYPE = "INSERT into WORK_TYPES (TEXT,START_PROCESS,QC,AUTHORIZATION_REQUIRED,ACTIVE,INDEXING_PRIORITY,CONDITIONAL_PERFORMER,ADMINISTRATOR,AUTHORIZER,QC_OPERATOR) values (?,?,'N','N','Y','Normal','{Liberty}IndexOperator','{Liberty}IndexOperator',null,null)";
+	private static final String DELETE_WORKTYPE = "UPDATE WORK_TYPES set ACTIVE = 'N' where TEXT = ? and ACTIVE = 'Y'";
+	private static final String UPDATE_WORKTYPE = "UPDATE WORK_TYPES set ACTIVE = 'Y', START_PROCESS = ? where TEXT = ? and ACTIVE = 'N'";
 
 	@Autowired
 	IppService ippService;
@@ -334,8 +336,8 @@ public class ProcessDetailsService {
 							.equals(ApplicationConstants.ROUTE_BY_WORKTYPE_PROCESS_DEFINITION.getValue())) {
 						processJson.addProperty("name", (String) ippService.getProcessData(processInstanceOID,
 								ApplicationConstants.WORK_TYPE_ID.getValue()));
-					}else{
-					processJson.addProperty("name", pi.getProcessName());
+					} else {
+						processJson.addProperty("name", pi.getProcessName());
 					}
 					processJson.addProperty("id", processInstanceOID);
 
@@ -400,9 +402,10 @@ public class ProcessDetailsService {
 			return Response.ok(mainObj.toString(), MediaType.APPLICATION_JSON).build();
 
 		} catch (Exception e) {
-			LOG.info(
-					"Exception inside getProcessDataForIndexing  REST API :  Getting Process Data Paths for a Process ID !"
-							+ e.getStackTrace());
+			LOG.info("Exception inside getProcessDataForIndexing while fetching process details 1" + e.getMessage());
+			LOG.info("Exception inside getProcessDataForIndexing while fetching process details 2" + e.getCause());
+			LOG.info("Exception inside getProcessDataForIndexing while fetching process details 3"
+					+ e.fillInStackTrace());
 			mainObj = new JsonObject();
 			JsonArray ja = new JsonArray();
 			mainObj.add("processInstances", ja);
@@ -427,6 +430,7 @@ public class ProcessDetailsService {
 		boolean setDataPath = false;
 		JsonObject dataPathJson = null;
 		ProcessInstances processInstances = null;
+		long processOIDFilter;
 
 		try {
 			JsonObject jsonObject = ippService.parseJSONObject(input);
@@ -452,8 +456,12 @@ public class ProcessDetailsService {
 
 				processInstances = ippService.fetchProcessInstances(jsonObject);
 				if (processInstances.size() > 0) {
-					processDetails = ippService.fetchAndSetProcessDataPaths(processInstances, setDataPath,
-							dataPathJson);
+					processOIDFilter = jsonObject.get("IndexData.ProcessOid") != null
+							&& !jsonObject.get("IndexData.ProcessOid").isJsonNull()
+									? jsonObject.get("IndexData.ProcessOid").getAsLong() : 0l;
+
+					processDetails = ippService.fetchAndSetProcessDataPaths(processInstances, setDataPath, dataPathJson,
+							processOIDFilter);
 				} else {
 					processDetails = new JsonObject();
 					JsonArray ja = new JsonArray();
@@ -475,9 +483,12 @@ public class ProcessDetailsService {
 			return Response.ok(processDetails.toString(), MediaType.APPLICATION_JSON).build();
 
 		} catch (Exception e) {
-			LOG.info("Exception inside getProcessDataPaths  REST API :  Getting Process Data Paths for a Process ID !");
 			LOG.info("Exception inside getProcessDataPaths  REST API :  Getting Process Data Paths for a Process ID !"
-					+ e.getStackTrace());
+					+ e.getCause());
+			LOG.info("Exception inside getProcessDataPaths  REST API :  Getting Process Data Paths for a Process ID !"
+					+ e.getMessage());
+			LOG.info("Exception inside getProcessDataPaths  REST API :  Getting Process Data Paths for a Process ID !"
+					+ e.fillInStackTrace());
 			processDetails = new JsonObject();
 			JsonArray ja = new JsonArray();
 			processDetails.add("ProcessDetails", ja);
@@ -688,11 +699,16 @@ public class ProcessDetailsService {
 	@Path("addWorktypeToDb/{workType}/{processId}")
 	public Response addWorktypeToDb(@PathParam("workType") String workType, @PathParam("processId") String processId) {
 		LOG.info("Adding Worktype to the worktype table :  Started");
+		int row = 0;
 		try {
-			int row = jdbcTemplate.update(INSERT_WORKTYPE, workType, processId);
-
-			LOG.info("Inside addWorktypeToDb ");
-
+			 row = jdbcTemplate.update(UPDATE_WORKTYPE, processId, workType);
+			 LOG.info("Update Query Fired");
+			 if(row <= 0)
+			 {
+				 row = jdbcTemplate.update(INSERT_WORKTYPE, workType, processId);
+				 LOG.info("Insert Query Fired");
+			 }
+					
 			JsonObject jo = null;
 			JsonObject mainObj = new JsonObject();
 			try {
@@ -711,6 +727,40 @@ public class ProcessDetailsService {
 			LOG.info("addWorktypeToDb NEW REST API : Exception  -- " + e.getStackTrace());
 			LOG.info("addWorktypeToDb NEW REST API : Exception  -- " + e.getCause());
 			LOG.warn("Unable to add services for: " + workType);
+			return Response.ok("JSON Error!").build();
+		}
+
+	}
+	
+	
+	@POST
+	@Produces(MediaType.APPLICATION_JSON)
+	@Path("deleteWorktypeFromDb/{workType}")
+	public Response deleteWorktypeFromDb(@PathParam("workType") String workType) {
+		LOG.info("Deleting Worktype from the worktype table :  Started");
+		try {
+			int row = jdbcTemplate.update(DELETE_WORKTYPE, workType);
+
+			LOG.info("Inside deleteWorktypeFromDb ");
+
+			JsonObject jo = null;
+			JsonObject mainObj = new JsonObject();
+			try {
+				jo = new JsonObject();
+				jo.addProperty("rows", Integer.toString(row));
+				mainObj.add("DeleteWorktype", jo);
+			} catch (Exception e) {
+				LOG.info("deleteWorktypeFromDb NEW REST API : Exception  -- " + e);
+				LOG.info("deleteWorktypeFromDb NEW REST API : Exception  -- " + e.getStackTrace());
+				LOG.info("deleteWorktypeFromDb NEW REST API : Exception  -- " + e.getCause());
+				return Response.ok("JSON Error!").build();
+			}
+			return Response.ok(mainObj.toString(), MediaType.APPLICATION_JSON_TYPE).build();
+		} catch (Exception e) {
+			LOG.info("deleteWorktypeFromDb NEW REST API : Exception  -- " + e);
+			LOG.info("deleteWorktypeFromDb NEW REST API : Exception  -- " + e.getStackTrace());
+			LOG.info("deleteWorktypeFromDb NEW REST API : Exception  -- " + e.getCause());
+			LOG.warn("Unable to delete for: " + workType);
 			return Response.ok("JSON Error!").build();
 		}
 
